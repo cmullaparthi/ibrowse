@@ -1,0 +1,225 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module ibrowse</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+<h1>Module ibrowse</h1>
+<ul><li>
+<a href="#index">Function index</a></li><li>
+<a href="#exported">Exported functions</a></li></ul>
+
+<h2>Description</h2>
+The ibrowse application implements an HTTP 1.1 client. This
+  module implements the API of the HTTP client. There is one named
+  process called 'ibrowse' which acts as a load balancer. There is
+  one process to handle one TCP connection to a webserver
+  (implemented in the module ibrowse_http_client). Multiple connections to a
+  webserver are setup based on the settings for each webserver. The
+  ibrowse process also determines which connection to pipeline a
+  certain request on.  The functions to call are send_req/3,
+  send_req/4, send_req/5, send_req/6.
+ 
+  <p>Here are a few sample invocations.</p>
+ 
+  <code>
+  ibrowse:send_req("http://intranet/messenger/", [], get).
+  <br><br>
+ 
+  ibrowse:send_req("http://www.google.com/", [], get, [],
+  		 [{proxy_user, "XXXXX"},
+  		  {proxy_password, "XXXXX"},
+  		  {proxy_host, "proxy"},
+  		  {proxy_port, 8080}], 1000).
+  <br><br>
+ 
+ ibrowse:send_req("http://www.erlang.org/download/otp_src_R10B-3.tar.gz", [], get, [],
+  		 [{proxy_user, "XXXXX"},
+  		  {proxy_password, "XXXXX"},
+  		  {proxy_host, "proxy"},
+  		  {proxy_port, 8080},
+  		  {save_response_to_file, true}], 1000).
+  <br><br>
+ 
+  ibrowse:set_dest("www.hotmail.com", 80, [{max_sessions, 10},
+  					    {max_pipeline_size, 1}]).
+  <br><br>
+ 
+  ibrowse:send_req("http://www.erlang.org", [], head).
+ 
+  <br><br>
+  ibrowse:send_req("http://www.sun.com", [], options).
+ 
+  <br><br>
+  ibrowse:send_req("http://www.bbc.co.uk", [], trace).
+ 
+  <br><br>
+  ibrowse:send_req("http://www.google.com", [], get, [],
+                    [{stream_to, self()}]).
+  </code>
+ 
+  <p>A driver exists which implements URL encoding in C, but the
+  speed achieved using only erlang has been good enough, so the
+  driver isn't actually used.</p>
+
+<h2><a name="index">Function Index</a></h2>
+
+<table width="100%" border="1"><tr><th colspan="2" align="left">Exported Functions</th></tr>
+<tr><td><a href="#code_change-3">code_change/3</a></td><td/></tr>
+<tr><td><a href="#finished_async_request-0">finished_async_request/0</a></td><td>Internal export.</td></tr>
+<tr><td><a href="#handle_call-3">handle_call/3</a></td><td/></tr>
+<tr><td><a href="#handle_cast-2">handle_cast/2</a></td><td/></tr>
+<tr><td><a href="#handle_info-2">handle_info/2</a></td><td/></tr>
+<tr><td><a href="#init-1">init/1</a></td><td/></tr>
+<tr><td><a href="#reply-2">reply/2</a></td><td>Internal export.</td></tr>
+<tr><td><a href="#send_req-3">send_req/3</a></td><td>This is the basic function to send a HTTP request.</td></tr>
+<tr><td><a href="#send_req-4">send_req/4</a></td><td>Same as send_req/3.</td></tr>
+<tr><td><a href="#send_req-5">send_req/5</a></td><td>Same as send_req/4.</td></tr>
+<tr><td><a href="#send_req-6">send_req/6</a></td><td>Same as send_req/5.</td></tr>
+<tr><td><a href="#set_dest-3">set_dest/3</a></td><td>Sets options for a destination.</td></tr>
+<tr><td><a href="#shutting_down-0">shutting_down/0</a></td><td>Internal export.</td></tr>
+<tr><td><a href="#start-0">start/0</a></td><td/></tr>
+<tr><td><a href="#start_link-0">start_link/0</a></td><td/></tr>
+<tr><td><a href="#stop-0">stop/0</a></td><td/></tr>
+<tr><td><a href="#terminate-2">terminate/2</a></td><td/></tr>
+<tr><td><a href="#trace_off-0">trace_off/0</a></td><td>Turn tracing off for the ibrowse process.</td></tr>
+<tr><td><a href="#trace_off-2">trace_off/2</a></td><td>Turn tracing OFF for all connections to the specified HTTP
+  server.</td></tr>
+<tr><td><a href="#trace_on-0">trace_on/0</a></td><td>Turn tracing on for the ibrowse process.</td></tr>
+<tr><td><a href="#trace_on-2">trace_on/2</a></td><td>Turn tracing on for all connections to the specified HTTP
+  server.</td></tr>
+</table>
+
+<h2><a name="exported">Exported Functions</a></h2>
+
+<h3><a name="code_change-3">code_change/3</a></h3>
+
+<p><code>code_change(Arg1, Arg2, Arg3) -> term()</code></p>
+<p> </p>
+
+<h3><a name="finished_async_request-0">finished_async_request/0</a></h3>
+
+<p><code>finished_async_request() -> term()</code></p>
+<p>Internal export. Called by a HTTP connection process to
+  indicate to the load balancing process (ibrowse) that an
+  asynchronous request has finished processing.</p>
+
+<h3><a name="handle_call-3">handle_call/3</a></h3>
+
+<p><code>handle_call(Arg1, Arg2, Arg3) -> term()</code></p>
+<p> </p>
+
+<h3><a name="handle_cast-2">handle_cast/2</a></h3>
+
+<p><code>handle_cast(Arg1, Arg2) -> term()</code></p>
+<p> </p>
+
+<h3><a name="handle_info-2">handle_info/2</a></h3>
+
+<p><code>handle_info(Arg1, Arg2) -> term()</code></p>
+<p> </p>
+
+<h3><a name="init-1">init/1</a></h3>
+
+<p><code>init(Arg1) -> term()</code></p>
+<p> </p>
+
+<h3><a name="reply-2">reply/2</a></h3>
+
+<p><code>reply(Arg1, Arg2) -> term()</code></p>
+<p>Internal export. Called by a HTTP connection process to
+  indicate to the load balancing process (ibrowse) that a synchronous
+  request has finished processing.</p>
+
+<h3><a name="send_req-3">send_req/3</a></h3>
+
+<p><code>send_req(Url::string(), Headers::<a href="#type-headerList">headerList()</a>, Method::<a href="#type-method">method()</a>) -> <a href="#type-response">response()</a><ul><li><a name="type-headerList">headerList()</a> = [{<a href="#type-header">header()</a>, <a href="#type-value">value()</a>}]</li><li><a name="type-header">header()</a> = atom() | string()</li><li><a name="type-value">value()</a> = term()</li><li><a name="type-method">method()</a> = get | post | head | options | put | delete | trace</li><li>Status = string()</li><li>ResponseHeaders = [<a href="#type-respHeader">respHeader()</a>]</li><li><a name="type-respHeader">respHeader()</a> = {<a href="#type-headerName">headerName()</a>, <a href="#type-headerValue">headerValue()</a>}</li><li><a name="type-headerName">headerName()</a> = string()</li><li><a name="type-headerValue">headerValue()</a> = string()</li><li><a name="type-response">response()</a> = {ok, Status, ResponseHeaders, ResponseBody} | {error, Reason}</li><li>ResponseBody = string()</li><li>Reason = term()</li></ul></code></p>
+<p>This is the basic function to send a HTTP request.
+  The Status return value indicates the HTTP status code returned by the webserver</p>
+
+<h3><a name="send_req-4">send_req/4</a></h3>
+
+<p><code>send_req(Url, Headers, Method::<a href="#type-method">method()</a>, Body::<a href="#type-body">body()</a>) -> <a href="#type-response">response()</a><ul><li><a name="type-body">body()</a> = [] | string() | binary()</li></ul></code></p>
+<p>Same as send_req/3.
+  If a list is specified for the body it has to be a flat list.</p>
+
+<h3><a name="send_req-5">send_req/5</a></h3>
+
+<p><code>send_req(Url::string(), Headers::<a href="#type-headerList">headerList()</a>, Method::<a href="#type-method">method()</a>, Body::<a href="#type-body">body()</a>, Options::<a href="#type-optionList">optionList()</a>) -> <a href="#type-response">response()</a><ul><li><a name="type-optionList">optionList()</a> = [<a href="#type-option">option()</a>]</li><li><a name="type-option">option()</a> = {max_sessions, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>} | {is_ssl, <a href="#type-boolean">boolean()</a>} | {ssl_options, [SSLOpt]} | {pool_name, atom()} | {proxy_host, string()} | {proxy_port, integer()} | {proxy_user, string()} | {proxy_password, string()} | {use_absolute_uri, <a href="#type-boolean">boolean()</a>} | {basic_auth, {<a href="#type-username">username()</a>, <a href="#type-password">password()</a>}} | {cookie, string()} | {content_length, integer()} | {content_type, string()} | {save_response_to_file, <a href="#type-boolean">boolean()</a>} | {stream_to, <a href="#type-process">process()</a>} | {http_vsn, {MajorVsn, MinorVsn}}</li><li><a name="type-process">process()</a> = pid() | atom()</li><li><a name="type-username">username()</a> = string()</li><li><a name="type-password">password()</a> = string()</li><li>SSLOpt = term()</li></ul></code></p>
+<p>Same as send_req/4.
+  For a description of SSL Options, look in the ssl manpage. If the
+  HTTP Version to use is not specified, the default is 1.1</p>
+
+<h3><a name="send_req-6">send_req/6</a></h3>
+
+<p><code>send_req(Url, Headers::<a href="#type-headerList">headerList()</a>, Method::<a href="#type-method">method()</a>, Body::<a href="#type-body">body()</a>, Options::<a href="#type-optionList">optionList()</a>, Timeout) -> <a href="#type-response">response()</a><ul><li>Timeout = integer() | infinity</li></ul></code></p>
+<p>Same as send_req/5.
+  All timeout values are in milliseconds.</p>
+
+<h3><a name="set_dest-3">set_dest/3</a></h3>
+
+<p><code>set_dest(Host::string(), Port::integer(), Opts::<a href="#type-opt_list">opt_list()</a>) -> ok<ul><li><a name="type-opt_list">opt_list()</a> = [opt]</li><li><a name="type-opt">opt()</a> = {max_sessions, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>}</li></ul></code></p>
+<p>Sets options for a destination. If the options have not been
+  set in the ibrowse.conf file, it can be set using this function
+  before sending the first request to the destination. If not,
+  defaults will be used. Entries in ibrowse.conf look like this.
+  <code><br>
+  {dest, Host, Port, MaxSess, MaxPipe, Options}.<br>
+  where <br>
+  Host = string(). "www.erlang.org" | "193.180.168.23"<br>
+  Port = integer()<br>
+  MaxSess = integer()<br>
+  MaxPipe = integer()<br>
+  Options = optionList() -- see options in send_req/5<br>
+  </code></p>
+
+<h3><a name="shutting_down-0">shutting_down/0</a></h3>
+
+<p><code>shutting_down() -> term()</code></p>
+<p>Internal export. Called by a HTTP connection process to
+  indicate to ibrowse that it is shutting down and further requests
+  should not be sent it's way.</p>
+
+<h3><a name="start-0">start/0</a></h3>
+
+<p><code>start() -> term()</code></p>
+<p> </p>
+
+<h3><a name="start_link-0">start_link/0</a></h3>
+
+<p><code>start_link() -> term()</code></p>
+<p> </p>
+
+<h3><a name="stop-0">stop/0</a></h3>
+
+<p><code>stop() -> term()</code></p>
+<p> </p>
+
+<h3><a name="terminate-2">terminate/2</a></h3>
+
+<p><code>terminate(Arg1, Arg2) -> term()</code></p>
+<p> </p>
+
+<h3><a name="trace_off-0">trace_off/0</a></h3>
+
+<p><code>trace_off() -> term()</code></p>
+<p>Turn tracing off for the ibrowse process</p>
+
+<h3><a name="trace_off-2">trace_off/2</a></h3>
+
+<p><code>trace_off(Host, Port) -> term()</code></p>
+<p>Turn tracing OFF for all connections to the specified HTTP
+  server.</p>
+
+<h3><a name="trace_on-0">trace_on/0</a></h3>
+
+<p><code>trace_on() -> term()</code></p>
+<p>Turn tracing on for the ibrowse process</p>
+
+<h3><a name="trace_on-2">trace_on/2</a></h3>
+
+<p><code>trace_on(Host, Port) -> term()<ul><li>Host = string()</li><li>Port = integer()</li></ul></code></p>
+<p>Turn tracing on for all connections to the specified HTTP
+  server. Host is whatever is specified as the domain name in the URL</p></body>
+</html>

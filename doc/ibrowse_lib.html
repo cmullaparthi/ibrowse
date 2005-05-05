@@ -1,0 +1,52 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<title>Module ibrowse_lib</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body bgcolor="white">
+<h1>Module ibrowse_lib</h1>
+<ul><li>
+<a href="#index">Function index</a></li><li>
+<a href="#exported">Exported functions</a></li></ul>
+
+<h2>Description</h2>
+Module with a few useful functions
+
+<h2><a name="index">Function Index</a></h2>
+
+<table width="100%" border="1"><tr><th colspan="2" align="left">Exported Functions</th></tr>
+<tr><td><a href="#decode_rfc822_date-1">decode_rfc822_date/1</a></td><td/></tr>
+<tr><td><a href="#drv_ue-1">drv_ue/1</a></td><td/></tr>
+<tr><td><a href="#drv_ue-2">drv_ue/2</a></td><td/></tr>
+<tr><td><a href="#status_code-1">status_code/1</a></td><td>Given a status code, returns an atom describing the status code.</td></tr>
+<tr><td><a href="#url_encode-1">url_encode/1</a></td><td>URL-encodes a string based on RFC 1738.</td></tr>
+</table>
+
+<h2><a name="exported">Exported Functions</a></h2>
+
+<h3><a name="decode_rfc822_date-1">decode_rfc822_date/1</a></h3>
+
+<p><code>decode_rfc822_date(Arg1) -> term()</code></p>
+<p> </p>
+
+<h3><a name="drv_ue-1">drv_ue/1</a></h3>
+
+<p><code>drv_ue(Arg1) -> term()</code></p>
+<p> </p>
+
+<h3><a name="drv_ue-2">drv_ue/2</a></h3>
+
+<p><code>drv_ue(Arg1, Arg2) -> term()</code></p>
+<p> </p>
+
+<h3><a name="status_code-1">status_code/1</a></h3>
+
+<p><code>status_code(StatusCode) -> StatusDescription<ul><li>StatusCode = string() | integer()</li><li>StatusDescription = atom()</li></ul></code></p>
+<p>Given a status code, returns an atom describing the status code.</p>
+
+<h3><a name="url_encode-1">url_encode/1</a></h3>
+
+<p><code>url_encode(Str) -> UrlEncodedStr<ul><li>Str = string()</li><li>UrlEncodedStr = string()</li></ul></code></p>
+<p>URL-encodes a string based on RFC 1738. Returns a flat list.</p></body>
+</html>
