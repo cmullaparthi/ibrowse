@@ -1,8 +1,8 @@
-$Id: README,v 1.1 2005/05/05 22:28:27 chandrusf Exp $
+$Id: README,v 1.2 2005/05/05 23:37:36 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
-	- supports GET, POST, OPTIONS and HEAD only
+	- supports GET, POST, OPTIONS, HEAD, PUT, DELETE, TRACE only
 	- Understands HTTP/0.9, HTTP/1.0 and HTTP/1.1
 	- Understands chunked encoding
 	- Named pools of connections to each webserver
