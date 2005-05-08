@@ -5,7 +5,7 @@
 %% @doc Module with a few useful functions
 
 -module(ibrowse_lib).
--vsn('$Id: ibrowse_lib.erl,v 1.1 2005/05/05 22:28:28 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_lib.erl,v 1.2 2005/05/08 22:04:19 chandrusf Exp $ ').
 -author('chandru').
 -ifdef(debug).
 -compile(export_all).
@@ -120,7 +120,6 @@ status_code(404) -> not_found;
 status_code(405) -> method_not_allowed;
 status_code(406) -> not_acceptable;
 status_code(407) -> proxy_authentication_required;
-status_code(408) -> request_tunnel;
 status_code(408) -> request_timeout;
 status_code(409) -> conflict;
 status_code(410) -> gone;
