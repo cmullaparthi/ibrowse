@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.1 2005/05/05 22:28:28 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.2 2005/05/31 11:56:06 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -204,10 +204,10 @@ handle_info({{send_req, [Url, Headers, Method,
 	    end,
 	    State_2 = case Status of
 			  idle ->
-			      State_1#state{status=get_header,
-					    cur_req=NewReq};
+			      State_1#state{status = get_header,
+					    cur_req = NewReq};
 			  _ ->
-			      State_1
+			      State_1#state{cur_req = NewReq}
 		      end,
 	    case StreamTo of
 		undefined ->
