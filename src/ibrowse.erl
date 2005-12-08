@@ -58,7 +58,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.1 2005/05/05 22:28:28 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.2 2005/12/08 12:05:07 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -181,7 +181,7 @@ send_req(Url, Headers, Method, Body) ->
 %% HTTP Version to use is not specified, the default is 1.1
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method(), Body::body(), Options::optionList()) -> response()
 %% optionList() = [option()]
-%% option() = {max_sessions, integer()}        | 
+%% option() = {max_sessions, integer()}        |
 %%          {max_pipeline_size, integer()}     |
 %%          {trace, boolean()}                 | 
 %%          {is_ssl, boolean()}                |
@@ -198,11 +198,14 @@ send_req(Url, Headers, Method, Body) ->
 %%          {content_type, string()}           |
 %%          {save_response_to_file, boolean()} |
 %%          {stream_to, process()}             |
-%%          {http_vsn, {MajorVsn, MinorVsn}}
+%%          {http_vsn, {MajorVsn, MinorVsn}}   |
+%%          {transfer_encoding, {chunked, ChunkSize}}
+%% 
 %% process() = pid() | atom()
 %% username() = string()
 %% password() = string()
 %% SSLOpt = term()
+%% ChunkSize = integer()
 send_req(Url, Headers, Method, Body, Options) ->
     send_req(Url, Headers, Method, Body, Options, 30000).
 

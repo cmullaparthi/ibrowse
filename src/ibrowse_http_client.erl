@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.3 2005/06/07 21:40:02 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.4 2005/12/08 12:05:07 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -451,8 +451,12 @@ send_req_1(Url, Headers, Method, Body, Options, Sock, State) ->
 	 port = Port, 
 	 path = RelPath} = Url_1 = parse_url(Url),
     Headers_1 = add_auth_headers(Url_1, Options, Headers, State),
+    HostString = case Port of
+		     80 -> Host;
+		     _ -> [Host, ":", integer_to_list(Port)]
+		 end,
     Req = make_request(Method, 
-		       [{"Host", [Host, ":", integer_to_list(Port)]} | Headers_1], 
+		       [{"Host", HostString} | Headers_1], 
 		       AbsPath, RelPath, Body, Options, State#state.use_proxy),
     case get(my_trace_flag) of %%Avoid the binary operations if trace is not on...
 	true ->
@@ -529,14 +533,26 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options, UseProxy) ->
 		    true ->
 			Headers
 		end,
-    Headers_2 = cons_headers(Headers_1),
+    {Headers_2, Body_1} = 
+	case get_value(transfer_encoding, Options, false) of
+	    false ->
+		{Headers_1, Body};
+	    {chunked, ChunkSize} ->
+		{[{X, Y} || {X, Y} <- Headers_1, 
+			    X /= "Content-Length",
+			    X /= "content-length",
+			    X /= content_length] ++
+		 [{"Transfer-Encoding", "chunked"}],
+		 chunk_request_body(Body, ChunkSize)}
+	end,
+    Headers_3 = cons_headers(Headers_2),
     Uri = case get_value(use_absolute_uri, Options, false) or UseProxy of
 	      true ->
 		  AbsPath;
 	      false -> 
 		  RelPath
 	  end,
-    [method(Method), " ", Uri, " ", HttpVsn, crnl(), Headers_2, crnl(), Body].
+    [method(Method), " ", Uri, " ", HttpVsn, crnl(), Headers_3, crnl(), Body_1].
 
 http_vsn_string({0,9}) -> "HTTP/0.9";
 http_vsn_string({1,0}) -> "HTTP/1.0";
@@ -567,6 +583,38 @@ encode_headers([{Name,Val} | T], Acc) when atom(Name) ->
     encode_headers(T, [[atom_to_list(Name), ": ", fmt_val(Val), crnl()] | Acc]);
 encode_headers([], Acc) ->
     lists:reverse(Acc).
+
+chunk_request_body(Body, ChunkSize) ->
+    chunk_request_body(Body, ChunkSize, []).
+
+chunk_request_body(Body, _ChunkSize, Acc) when Body == <<>>; Body == [] ->
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk | Acc]);
+chunk_request_body(Body, ChunkSize, Acc) when binary(Body),
+                                              size(Body) >= ChunkSize ->
+    <<ChunkBody:ChunkSize/binary, Rest/binary>> = Body,
+    Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
+	     ChunkBody, "\r\n"],
+    chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
+chunk_request_body(Body, _ChunkSize, Acc) when binary(Body) ->
+    BodySize = size(Body),
+    Chunk = [ibrowse_lib:dec2hex(4, BodySize),"\r\n",
+	     Body, "\r\n"],
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk, Chunk | Acc]);
+chunk_request_body(Body, ChunkSize, Acc) when list(Body),
+                                              length(Body) >= ChunkSize ->
+    {ChunkBody, Rest} = split_list_at(Body, ChunkSize),
+    Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
+	     ChunkBody, "\r\n"],
+    chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
+chunk_request_body(Body, _ChunkSize, Acc) when list(Body) ->
+    BodySize = length(Body),
+    Chunk = [ibrowse_lib:dec2hex(4, BodySize),"\r\n",
+	     Body, "\r\n"],
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk, Chunk | Acc]).
+
 
 parse_response(_Data, #state{cur_req = undefined}=State) ->
     State#state{status = idle};

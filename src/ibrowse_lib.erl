@@ -5,7 +5,7 @@
 %% @doc Module with a few useful functions
 
 -module(ibrowse_lib).
--vsn('$Id: ibrowse_lib.erl,v 1.2 2005/05/08 22:04:19 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_lib.erl,v 1.3 2005/12/08 12:05:07 chandrusf Exp $ ').
 -author('chandru').
 -ifdef(debug).
 -compile(export_all).
@@ -14,6 +14,7 @@
 -export([url_encode/1,
 	 decode_rfc822_date/1,
 	 status_code/1,
+	 dec2hex/2,
 	 drv_ue/1,
 	 drv_ue/2]).
 
@@ -138,3 +139,13 @@ status_code(504) -> gateway_timeout;
 status_code(505) -> http_version_not_supported;
 status_code(X) when is_list(X) -> status_code(list_to_integer(X));
 status_code(_)   -> unknown_status_code.
+
+%% @doc dec2hex taken from gtk.erl in std dist
+%% @spec dec2hex(M, N) -> string()
+%% M = integer() - number of hex digits required
+%% N = integer() - the number to represent as hex
+dec2hex(M,N) -> dec2hex(M,N,[]).
+
+dec2hex(0,N,Ack) -> Ack;
+dec2hex(M,N,Ack) -> dec2hex(M-1,N bsr 4,[d2h(N band 15)|Ack]).
+
