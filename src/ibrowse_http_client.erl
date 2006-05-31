@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.5 2006/03/17 10:05:18 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.6 2006/05/31 22:02:06 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -207,7 +207,7 @@ handle_info({{send_req, [Url, Headers, Method,
 			      State_1#state{status = get_header,
 					    cur_req = NewReq};
 			  _ ->
-			      State_1#state{cur_req = NewReq}
+			      State_1
 		      end,
 	    case StreamTo of
 		undefined ->
