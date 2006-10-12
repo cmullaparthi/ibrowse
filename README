@@ -1,4 +1,4 @@
-$Id: README,v 1.4 2005/12/08 12:05:06 chandrusf Exp $
+$Id: README,v 1.5 2006/10/12 09:25:29 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -28,6 +28,10 @@ CONTRIBUTIONS & CHANGE HISTORY
 08-Dec-2005 - Richard Cameron (camster@citeulike.org). Patch to ibrowse to
               prevent port number being included in the Host header when port
               80 is intended.
+
+12-10-2006 -  Chris Newcombe reported bug in dealing with requests where no 
+              body is expected in the response. The first request would succeed
+              and the next request would hang.
 
 Here are some usage examples. Enjoy!
 

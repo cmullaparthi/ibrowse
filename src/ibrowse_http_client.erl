@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.6 2006/05/31 22:02:06 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.7 2006/10/12 09:25:30 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -317,7 +317,6 @@ handle_sock_data(Data, #state{status=get_body, content_length=CL,
 		{error, Reason} ->
 		    ibrowse:shutting_down(),
 		    {_, Reqs_1} = queue:out(Reqs),
-%		    {{value, Req}, Reqs_1} = queue:out(Reqs),
 		    #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
 		    do_reply(From, StreamTo, ReqId,
 			     {error, {file_open_error, Reason, Headers}}),
@@ -620,7 +619,8 @@ parse_response(_Data, #state{cur_req = undefined}=State) ->
     State#state{status = idle};
 parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 			    cur_req=CurReq}=State) ->
-    #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
+    #request{from=From, stream_to=StreamTo, req_id=ReqId,
+	     options = CurReqOptions, method=Method} = CurReq,
     MaxHeaderSize = safe_get_env(ibrowse, max_headers_size, infinity),
     case scan_header(Data, Acc) of
 	{yes, Headers, Data_1}  ->
@@ -637,8 +637,6 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		false ->
 		    ok
 	    end,
-	    [#request{options = CurReqOptions,
-		      method=Method} | _] = queue:to_list(Reqs),
 	    SaveResponseToFile = get_value(save_response_to_file, CurReqOptions, false),
 	    State_1 = State#state{recvd_headers=Headers_1, status=get_body, 
 				  save_response_to_file = SaveResponseToFile,
@@ -649,13 +647,12 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 	    case get_value("content-length", LCHeaders, undefined) of
 		_ when Method == head ->
 		    {_, Reqs_1} = queue:out(Reqs),
-%		    {{value, Req}, Reqs_1} = queue:out(Reqs),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 		    do_reply(From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
-%		    ibrowse:reply(From, {ok, StatCode, Headers_1, []}),
 		    cancel_timer(State#state.send_timer, {eat_message, {req_timedout, From}}),
 		    State_2 = reset_state(State_1),
-		    parse_response(Data_1, State_2#state{reqs=Reqs_1});
+		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
+		    parse_response(Data_1, State_3);
 		_ when hd(StatCode) == $1 ->
 		    %% No message body is expected. Server may send
 		    %% one or more 1XX responses before a proper
@@ -669,13 +666,12 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		    %% No message body is expected for these Status Codes.
 		    %% RFC2616 - Sec 4.4
 		    {_, Reqs_1} = queue:out(Reqs),
-%		    {{value, Req}, Reqs_1} = queue:out(Reqs),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 		    do_reply(From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
-%		    ibrowse:reply(From, {ok, StatCode, Headers_1, []}),
 		    cancel_timer(State#state.send_timer, {eat_message, {req_timedout, From}}),
 		    State_2 = reset_state(State_1),
-		    parse_response(Data_1, State_2#state{reqs=Reqs_1});
+		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
+		    parse_response(Data_1, State_3);
 		_ when TransferEncoding == "chunked" ->
 		    do_trace("Chunked encoding detected...~n",[]),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
@@ -688,7 +684,6 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		    State_1#state{reply_buffer=[Data_1]};
 		undefined ->
 		    {_, Reqs_1} = queue:out(Reqs),
-%		    {{value, Req}, Reqs_1} = queue:out(Reqs),
 		    do_reply(From, StreamTo, ReqId, 
 			     {error, {content_length_undefined, Headers}}),
 		    do_error_reply(State_1#state{reqs=Reqs_1}, previous_request_failed),
@@ -704,7 +699,6 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 							    content_length=V_1});
 			_ ->
 			    {_, Reqs_1} = queue:out(Reqs),
-%			    {{value, Req}, Reqs_1} = queue:out(Reqs),
 			    do_reply(From, StreamTo, ReqId,
 				     {error, {content_length_undefined, Headers}}),
 			    do_error_reply(State_1#state{reqs=Reqs_1}, previous_request_failed),
@@ -743,7 +737,6 @@ parse_11_response(DataRecvd,
 		    %%
 		    %% Do we have to preserve the chunk encoding when streaming?
 		    %%
-%		    do_interim_reply(From, StreamTo, ReqId, ChunkHeader++[$\r, $\n]),
 		    do_interim_reply(StreamTo, ReqId, {chunk_start, ChunkSize}),
 		    RemLen = length(Data_1),
 		    do_trace("Determined chunk size: ~p. Already recvd: ~p~n", [ChunkSize, RemLen]),
@@ -770,7 +763,6 @@ parse_11_response(DataRecvd,
 	    %%
 	    %% Do we have to preserve the chunk encoding when streaming?
 	    %%
-%	    do_interim_reply(From, StreamTo, ReqId, [$\r, $\n]),
 	    State_1 = State#state{chunk_size=chunk_start, deleted_crlf=true},
 	    State_2 = case StreamTo of
 			  undefined ->
@@ -801,11 +793,9 @@ parse_11_response(DataRecvd,
     case scan_header(DataRecvd_1, Trailer) of
 	{yes, _TEHeaders, Rem} ->
 	    {_, Reqs_1} = queue:out(Reqs),
-%	    {{value, Req}, Reqs_1} = queue:out(Reqs),
 	    %%
 	    %% Do we have to preserve the chunk encoding when streaming?
 	    %%
-%	    do_interim_reply(StreamTo, ReqId, [$\r, $\n]++TEHeaders++[$\r, $\n]),
 	    do_interim_reply(StreamTo, ReqId, chunk_end),
 	    State_1 = handle_response(CurReq, State#state{reqs=Reqs_1}),
 	    parse_response(Rem, reset_state(State_1));
@@ -867,12 +857,7 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 		       tmp_file_fd=Fd,
 		       send_timer=ReqTimer,
 		       recvd_headers = RespHeaders}=State) ->
-    State_1 = case queue:to_list(Reqs) of
-		  [] ->
-		      State#state{cur_req = undefined};
-		  [NextReq | _] ->
-		      State#state{cur_req = NextReq}
-	      end,
+    State_1 = set_cur_request(State),
     do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, {file, TmpFilename}}),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
     file:close(Fd),
@@ -888,12 +873,7 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 	       _ ->
 		   lists:flatten(lists:reverse(RepBuf))
 	   end,
-    State_1 = case queue:to_list(Reqs) of
-		  [] ->
-		      State#state{cur_req = undefined};
-		  [NextReq | _] ->
-		      State#state{cur_req = NextReq}
-	      end,
+    State_1 = set_cur_request(State),
     case get(conn_close) of
 	"close" ->
 	    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, Body}),
@@ -908,6 +888,14 @@ reset_state(State) ->
     State#state{status=get_header, rep_buf_size=0,content_length=undefined,
 		reply_buffer=[], chunks=[], recvd_headers=[], deleted_crlf=false,
 		http_status_code=undefined, chunk_size=0, transfer_encoding=undefined}.
+
+set_cur_request(#state{reqs = Reqs} = State) ->
+    case queue:to_list(Reqs) of
+	[] ->
+	    State#state{cur_req = undefined};
+	[NextReq | _] ->
+	    State#state{cur_req = NextReq}
+    end.
 
 parse_headers(Headers) ->
     case scan_crlf(Headers, []) of
@@ -1169,9 +1157,6 @@ do_reply(From, undefined, _, Msg) ->
 do_reply(_From, StreamTo, ReqId, {ok, _, _, _}) ->
     ibrowse:finished_async_request(),
     catch StreamTo ! {ibrowse_async_response_end, ReqId};
-% do_reply(_From, StreamTo, ReqId, {ok, _, _, Data}) ->
-%     ibrowse:finished_async_request(),
-%     catch StreamTo ! {ibrowse_async_response_end, ReqId, Data};
 do_reply(_From, StreamTo, ReqId, Msg) ->
     catch StreamTo ! {ibrowse_async_response, ReqId, Msg}.
 
