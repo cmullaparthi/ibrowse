@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.7 2006/10/12 09:25:30 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.8 2006/11/13 20:41:36 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -410,13 +410,22 @@ handle_sock_closed(#state{cur_req=undefined}) ->
 %% of response. There maybe requests pipelined which need a response.
 handle_sock_closed(#state{reply_buffer=Buf, reqs=Reqs, http_status_code=SC,
 			  is_closing=IsClosing, cur_req=CurReq,
+			  tmp_file_name=TmpFilename, tmp_file_fd=Fd,
 			  status=get_body, recvd_headers=Headers}=State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
     case IsClosing of
 	true ->
 	    {_, Reqs_1} = queue:out(Reqs),
-%	    {{value, Req}, Reqs_1} = queue:out(Reqs),
-	    do_reply(From, StreamTo, ReqId, {ok, SC, Headers, lists:flatten(lists:reverse(Buf))}),
+	    case TmpFilename of
+		undefined ->
+		    do_reply(From, StreamTo, ReqId,
+			     {ok, SC, Headers,
+			      lists:flatten(lists:reverse(Buf))});
+		_ ->
+		    file:close(Fd),
+		    do_reply(From, StreamTo, ReqId,
+			     {ok, SC, Headers, {file, TmpFilename}})
+	    end,
 	    do_error_reply(State#state{reqs = Reqs_1}, connection_closed);
 	_ ->
 	    do_error_reply(State, connection_closed)
@@ -858,9 +867,9 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 		       send_timer=ReqTimer,
 		       recvd_headers = RespHeaders}=State) ->
     State_1 = set_cur_request(State),
+    file:close(Fd),
     do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, {file, TmpFilename}}),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
-    file:close(Fd),
     State_1#state{tmp_file_name=undefined, tmp_file_fd=undefined};
 handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 		#state{http_status_code=SCode, recvd_headers=RespHeaders,

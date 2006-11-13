@@ -1,4 +1,4 @@
-$Id: README,v 1.5 2006/10/12 09:25:29 chandrusf Exp $
+$Id: README,v 1.6 2006/11/13 20:41:36 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -15,23 +15,33 @@ ibrowse is a HTTP client. The following are a list of features.
 	- Can talk to Secure webservers using SSL
 	- any other features in the code not listed here :)
 
+ibrowse is available under two different licenses. LGPL and the BSD license.
+
 Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
-08-May-2005 - Youns Hafri made a CRUX LINUX port of ibrowse.
-	      http://yhafri.club.fr/crux/index.html
+13-11-2006 -  Youns Hafri reported a bug where ibrowse was not returning the 
+                temporary filename when the server was closing the connection 
+                after sending the data (as in HTTP/1.0).
+              Released ibrowse under the BSD license
 
-22-Nov-2005 - Added ability to generate requests using the Chunked 
-              Transfer-Encoding.
+12-10-2006 -  Chris Newcombe reported bug in dealing with requests where no 
+              body is expected in the response. The first request would succeed
+              and the next request would hang.
+
+24-May-2006 - Sean Hinde reported a bug. Async responses with pipelining was 
+              returning the wrong result.
 
 08-Dec-2005 - Richard Cameron (camster@citeulike.org). Patch to ibrowse to
               prevent port number being included in the Host header when port
               80 is intended.
 
-12-10-2006 -  Chris Newcombe reported bug in dealing with requests where no 
-              body is expected in the response. The first request would succeed
-              and the next request would hang.
+22-Nov-2005 - Added ability to generate requests using the Chunked 
+              Transfer-Encoding.
+
+08-May-2005 - Youns Hafri made a CRUX LINUX port of ibrowse.
+	      http://yhafri.club.fr/crux/index.html
 
 Here are some usage examples. Enjoy!
 
