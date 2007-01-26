@@ -1,4 +1,4 @@
-$Id: README,v 1.6 2006/11/13 20:41:36 chandrusf Exp $
+$Id: README,v 1.7 2007/01/26 10:02:59 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -21,6 +21,9 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
+              behaving correctly when the transfer encoding was not chunked.
+
 13-11-2006 -  Youns Hafri reported a bug where ibrowse was not returning the 
                 temporary filename when the server was closing the connection 
                 after sending the data (as in HTTP/1.0).
