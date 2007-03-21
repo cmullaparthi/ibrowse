@@ -58,7 +58,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.2 2005/12/08 12:05:07 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.3 2007/03/21 00:26:41 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -157,7 +157,7 @@ set_dest(Host,Port,Opts) ->
 %% headerList() = [{header(), value()}]
 %% header() = atom() | string()
 %% value() = term()
-%% method() = get | post | head | options | put | delete | trace
+%% method() = get | post | head | options | put | delete | trace | mkcol | propfind | proppatch | lock | unlock | move | copy
 %% Status = string()
 %% ResponseHeaders = [respHeader()]
 %% respHeader() = {headerName(), headerValue()}

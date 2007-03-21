@@ -1,8 +1,9 @@
-$Id: README,v 1.7 2007/01/26 10:02:59 chandrusf Exp $
+$Id: README,v 1.8 2007/03/21 00:26:40 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
-	- supports GET, POST, OPTIONS, HEAD, PUT, DELETE, TRACE only
+	- supports GET, POST, OPTIONS, HEAD, PUT, DELETE, TRACE, 
+          MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK, MOVE and COPY
 	- Understands HTTP/0.9, HTTP/1.0 and HTTP/1.1
 	- Understands chunked encoding
         - Can generate requests using Chunked Transfer-Encoding
@@ -21,6 +22,8 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+06-03-2007 -  Eric Merritt sent a patch to support WebDAV requests.
+
 12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
               behaving correctly when the transfer encoding was not chunked.
 

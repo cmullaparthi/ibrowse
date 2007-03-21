@@ -5,7 +5,7 @@
 %% @doc Module with a few useful functions
 
 -module(ibrowse_lib).
--vsn('$Id: ibrowse_lib.erl,v 1.3 2005/12/08 12:05:07 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_lib.erl,v 1.4 2007/03/21 00:26:41 chandrusf Exp $ ').
 -author('chandru').
 -ifdef(debug).
 -compile(export_all).
@@ -98,6 +98,7 @@ month_int("Dec") -> 12.
 %% StatusDescription = atom()
 status_code(100) -> continue;
 status_code(101) -> switching_protocols;
+status_code(102) -> processing;
 status_code(200) -> ok;
 status_code(201) -> created;
 status_code(202) -> accepted;
@@ -105,6 +106,7 @@ status_code(203) -> non_authoritative_information;
 status_code(204) -> no_content;
 status_code(205) -> reset_content;
 status_code(206) -> partial_content;
+status_code(207) -> multi_status;
 status_code(300) -> multiple_choices;
 status_code(301) -> moved_permanently;
 status_code(302) -> found;
@@ -131,12 +133,16 @@ status_code(414) -> request_uri_too_long;
 status_code(415) -> unsupported_media_type;
 status_code(416) -> requested_range_not_satisfiable;
 status_code(417) -> expectation_failed;
+status_code(422) -> unprocessable_entity;
+status_code(423) -> locked;
+status_code(424) -> failed_dependency;
 status_code(500) -> internal_server_error;
 status_code(501) -> not_implemented;
 status_code(502) -> bad_gateway;
 status_code(503) -> service_unavailable;
 status_code(504) -> gateway_timeout;
 status_code(505) -> http_version_not_supported;
+status_code(507) -> insufficient_storage;
 status_code(X) when is_list(X) -> status_code(list_to_integer(X));
 status_code(_)   -> unknown_status_code.
 
@@ -146,6 +152,6 @@ status_code(_)   -> unknown_status_code.
 %% N = integer() - the number to represent as hex
 dec2hex(M,N) -> dec2hex(M,N,[]).
 
-dec2hex(0,N,Ack) -> Ack;
+dec2hex(0,_N,Ack) -> Ack;
 dec2hex(M,N,Ack) -> dec2hex(M-1,N bsr 4,[d2h(N band 15)|Ack]).
 

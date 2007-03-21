@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.9 2007/01/26 10:02:59 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.10 2007/03/21 00:26:41 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -993,13 +993,20 @@ fmt_val(Term)              -> io_lib:format("~p", [Term]).
 
 crnl() -> "\r\n".
 
-method(get)     -> "GET";
-method(post)    -> "POST";
-method(head)    -> "HEAD";
-method(options) -> "OPTIONS";
-method(put)     -> "PUT";
-method(delete)  -> "DELETE";
-method(trace)   -> "TRACE".
+method(get)       -> "GET";
+method(post)      -> "POST";
+method(head)      -> "HEAD";
+method(options)   -> "OPTIONS";
+method(put)       -> "PUT";
+method(delete)    -> "DELETE";
+method(trace)     -> "TRACE";
+method(mkcol)     -> "MKCOL";
+method(propfind)  -> "PROPFIND";
+method(proppatch) -> "PROPPATCH";
+method(lock)      -> "LOCK";
+method(unlock)    -> "UNLOCK";
+method(move)      -> "MOVE";
+method(copy)      -> "COPY".
 
 %% From RFC 2616
 %%
