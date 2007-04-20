@@ -5,7 +5,7 @@
 %% @doc Module with a few useful functions
 
 -module(ibrowse_lib).
--vsn('$Id: ibrowse_lib.erl,v 1.4 2007/03/21 00:26:41 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_lib.erl,v 1.5 2007/04/20 00:36:30 chandrusf Exp $ ').
 -author('chandru').
 -ifdef(debug).
 -compile(export_all).
@@ -16,7 +16,10 @@
 	 status_code/1,
 	 dec2hex/2,
 	 drv_ue/1,
-	 drv_ue/2]).
+	 drv_ue/2,
+	 encode_base64/1,
+	 decode_base64/1
+	]).
 
 drv_ue(Str) ->
     [{port, Port}| _] = ets:lookup(ibrowse_table, port),
@@ -36,6 +39,8 @@ drv_ue(Str, Port) ->
 url_encode(Str) when list(Str) ->
     url_encode_char(lists:reverse(Str), []).
 
+url_encode_char([X | T], Acc) when X >= $0, X =< $9 ->
+    url_encode_char(T, [X | Acc]);
 url_encode_char([X | T], Acc) when X >= $a, X =< $z ->
     url_encode_char(T, [X | Acc]);
 url_encode_char([X | T], Acc) when X >= $A, X =< $Z ->
@@ -93,8 +98,8 @@ month_int("Nov") -> 11;
 month_int("Dec") -> 12.
 
 %% @doc Given a status code, returns an atom describing the status code. 
-%% @spec status_code(StatusCode) -> StatusDescription
-%% StatusCode = string() | integer()
+%% @spec status_code(StatusCode::status_code()) -> StatusDescription
+%% status_code() = string() | integer()
 %% StatusDescription = atom()
 status_code(100) -> continue;
 status_code(101) -> switching_protocols;
@@ -147,11 +152,89 @@ status_code(X) when is_list(X) -> status_code(list_to_integer(X));
 status_code(_)   -> unknown_status_code.
 
 %% @doc dec2hex taken from gtk.erl in std dist
-%% @spec dec2hex(M, N) -> string()
-%% M = integer() - number of hex digits required
-%% N = integer() - the number to represent as hex
+%% M = integer() -- number of hex digits required
+%% N = integer() -- the number to represent as hex
+%% @spec dec2hex(M::integer(), N::integer()) -> string()
 dec2hex(M,N) -> dec2hex(M,N,[]).
 
 dec2hex(0,_N,Ack) -> Ack;
 dec2hex(M,N,Ack) -> dec2hex(M-1,N bsr 4,[d2h(N band 15)|Ack]).
 
+%% @doc Implements the base64 encoding algorithm. The output data type matches in the input data type.
+%% @spec encode_base64(In) -> Out
+%% In = string() | binary()
+%% Out = string() | binary()
+encode_base64(List) when list(List) ->
+    encode_base64_1(list_to_binary(List));
+encode_base64(Bin) when binary(Bin) ->
+    List = encode_base64_1(Bin),
+    list_to_binary(List).
+
+encode_base64_1(<<A:6, B:6, C:6, D:6, Rest/binary>>) ->
+    [int_to_b64(A), int_to_b64(B),
+     int_to_b64(C), int_to_b64(D) | encode_base64_1(Rest)];
+encode_base64_1(<<A:6, B:6, C:4>>) ->
+    [int_to_b64(A), int_to_b64(B), int_to_b64(C bsl 2), $=];
+encode_base64_1(<<A:6, B:2>>) ->
+    [int_to_b64(A), int_to_b64(B bsl 4), $=, $=];
+encode_base64_1(<<>>) ->
+    [].
+
+%% @doc Implements the base64 decoding algorithm. The output data type matches in the input data type.
+%% @spec decode_base64(In) -> Out | exit({error, invalid_input})
+%% In = string() | binary()
+%% Out = string() | binary()
+decode_base64(List) when list(List) ->
+    decode_base64_1(List, []);
+decode_base64(Bin) when binary(Bin) ->
+    List = decode_base64_1(binary_to_list(Bin), []),
+    list_to_binary(List).
+
+decode_base64_1([H | T], Acc) when ((H == $\t) or
+				    (H == 32) or
+				    (H == $\r) or
+				    (H == $\n)) ->
+    decode_base64_1(T, Acc);
+
+decode_base64_1([$=, $=], Acc) ->
+    lists:reverse(Acc);
+decode_base64_1([$=, _ | _], _Acc) ->
+    exit({error, invalid_input});
+
+decode_base64_1([A1, B1, $=, $=], Acc) ->
+    A = b64_to_int(A1),
+    B = b64_to_int(B1),
+    Oct1 = (A bsl 2) bor (B bsr 4),
+    decode_base64_1([], [Oct1 | Acc]);
+decode_base64_1([A1, B1, C1, $=], Acc) ->
+    A = b64_to_int(A1),
+    B = b64_to_int(B1),
+    C = b64_to_int(C1),
+    Oct1 = (A bsl 2) bor (B bsr 4),
+    Oct2 = ((B band 16#f) bsl 6) bor (C bsr 2),
+    decode_base64_1([], [Oct2, Oct1 | Acc]);
+decode_base64_1([A1, B1, C1, D1 | T], Acc) ->
+    A = b64_to_int(A1),
+    B = b64_to_int(B1),
+    C = b64_to_int(C1),
+    D = b64_to_int(D1),
+    Oct1 = (A bsl 2) bor (B bsr 4),
+    Oct2 = ((B band 16#f) bsl 4) bor (C bsr 2),
+    Oct3 = ((C band 2#11) bsl 6) bor D,
+    decode_base64_1(T, [Oct3, Oct2, Oct1 | Acc]);
+decode_base64_1([], Acc) ->
+    lists:reverse(Acc).
+
+%% Taken from httpd_util.erl
+int_to_b64(X) when X >= 0, X =< 25 -> X + $A;
+int_to_b64(X) when X >= 26, X =< 51 -> X - 26 + $a;
+int_to_b64(X) when X >= 52, X =< 61 -> X - 52 + $0;
+int_to_b64(62) -> $+;
+int_to_b64(63) -> $/.
+
+%% Taken from httpd_util.erl
+b64_to_int(X) when X >= $A, X =< $Z -> X - $A;
+b64_to_int(X) when X >= $a, X =< $z -> X - $a + 26;
+b64_to_int(X) when X >= $0, X =< $9 -> X - $0 + 52;
+b64_to_int($+) -> 62;
+b64_to_int($/) -> 63.

@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.10 2007/03/21 00:26:41 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.11 2007/04/20 00:36:30 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -571,7 +571,8 @@ cons_headers(Headers) ->
 cons_headers([], Acc) ->
     encode_headers(Acc);
 cons_headers([{basic_auth, {U,P}} | T], Acc) ->
-    cons_headers(T, [{"Authorization", ["Basic ", httpd_util:encode_base64(U++":"++P)]} | Acc]);
+    cons_headers(T, [{"Authorization",
+		      ["Basic ", ibrowse_lib:encode_base64(U++":"++P)]} | Acc]);
 cons_headers([{cookie, Cookie} | T], Acc) ->
     cons_headers(T, [{"Cookie", Cookie} | Acc]);
 cons_headers([{content_length, L} | T], Acc) ->

@@ -1,4 +1,4 @@
-$Id: README,v 1.8 2007/03/21 00:26:40 chandrusf Exp $
+$Id: README,v 1.9 2007/04/20 00:36:29 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,13 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+20-04-2007 - Geoff Cant sent a patch to remove URL encoding for digits in
+             ibrowse_lib:url_encode/1.
+             ibrowse had a dependency on the inets application because the 
+             ibrowse_http_client.erl invoked httpd_util:encode_base64/1. This
+             dependency is now removed and the encode_base64/1 has been 
+             implemented in ibrowse_lib.erl
+
 06-03-2007 -  Eric Merritt sent a patch to support WebDAV requests.
 
 12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
