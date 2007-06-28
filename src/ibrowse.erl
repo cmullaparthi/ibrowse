@@ -5,6 +5,9 @@
 %%%
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
+%% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
+%% @copyright 2005-2007 Chandrashekhar Mullaparthi
+%% @version 1.2.7
 %% @doc The ibrowse application implements an HTTP 1.1 client. This
 %% module implements the API of the HTTP client. There is one named
 %% process called 'ibrowse' which acts as a load balancer. There is
@@ -58,7 +61,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.3 2007/03/21 00:26:41 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.4 2007/06/28 22:29:01 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -178,7 +181,16 @@ send_req(Url, Headers, Method, Body) ->
 
 %% @doc Same as send_req/4. 
 %% For a description of SSL Options, look in the ssl manpage. If the
-%% HTTP Version to use is not specified, the default is 1.1
+%% HTTP Version to use is not specified, the default is 1.1.
+%% <br/>
+%% <p>The <code>host_header</code> is useful in the case where ibrowse is
+%% connecting to a component such as <a
+%% href="http://www.stunnel.org">stunnel</a> which then sets up a
+%% secure connection to a webserver. In this case, the URL supplied to
+%% ibrowse must have the stunnel host/port details, but that won't
+%% make sense to the destination webserver. This option can then be
+%% used to specify what should go in the <code>Host</code> header in
+%% the request.</p>
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method(), Body::body(), Options::optionList()) -> response()
 %% optionList() = [option()]
 %% option() = {max_sessions, integer()}        |
@@ -199,6 +211,7 @@ send_req(Url, Headers, Method, Body) ->
 %%          {save_response_to_file, boolean()} |
 %%          {stream_to, process()}             |
 %%          {http_vsn, {MajorVsn, MinorVsn}}   |
+%%          {host_header, string()}            |
 %%          {transfer_encoding, {chunked, ChunkSize}}
 %% 
 %% process() = pid() | atom()

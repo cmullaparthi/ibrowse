@@ -1,4 +1,4 @@
-$Id: README,v 1.9 2007/04/20 00:36:29 chandrusf Exp $
+$Id: README,v 1.10 2007/06/28 22:29:00 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,9 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+28-06-2007 - Added host_header option to enable connection to secure sites
+             via stunnel
+
 20-04-2007 - Geoff Cant sent a patch to remove URL encoding for digits in
              ibrowse_lib:url_encode/1.
              ibrowse had a dependency on the inets application because the 

@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.11 2007/04/20 00:36:30 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.12 2007/06/28 22:29:01 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -459,12 +459,17 @@ send_req_1(Url, Headers, Method, Body, Options, Sock, State) ->
 	 port = Port, 
 	 path = RelPath} = Url_1 = parse_url(Url),
     Headers_1 = add_auth_headers(Url_1, Options, Headers, State),
-    HostString = case Port of
-		     80 -> Host;
-		     _ -> [Host, ":", integer_to_list(Port)]
-		 end,
+    HostHeaderValue = case lists:keysearch(host_header, 1, Options) of
+			  false ->
+			      case Port of
+				  80 -> Host;
+				  _ -> [Host, ":", integer_to_list(Port)]
+			      end;
+			  {value, {_, Host_h_val}} ->
+			      Host_h_val
+		      end,
     Req = make_request(Method, 
-		       [{"Host", HostString} | Headers_1], 
+		       [{"Host", HostHeaderValue} | Headers_1],
 		       AbsPath, RelPath, Body, Options, State#state.use_proxy),
     case get(my_trace_flag) of %%Avoid the binary operations if trace is not on...
 	true ->
