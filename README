@@ -1,4 +1,4 @@
-$Id: README,v 1.10 2007/06/28 22:29:00 chandrusf Exp $
+$Id: README,v 1.11 2007/10/09 00:02:30 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,10 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+29-08-2007 - Bug report by Peter Kristensen(ptx _at_ daimi dot au dot dk). 
+             ibrowse crashes when the webserver returns just the Status line 
+             and nothing else.
+
 28-06-2007 - Added host_header option to enable connection to secure sites
              via stunnel
 

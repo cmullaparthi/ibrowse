@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.12 2007/06/28 22:29:01 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.13 2007/10/09 00:02:30 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -984,7 +984,7 @@ parse_header([H | T], Acc) ->
 parse_header([], _) ->
     invalid.
 
-scan_header([$\n|T], [$\r,$\n,$\r|L]) -> {yes, lists:reverse(L), T};
+scan_header([$\n|T], [$\r,$\n,$\r|L]) -> {yes, lists:reverse([$\n,$\r| L]), T};
 scan_header([H|T],  L)                -> scan_header(T, [H|L]);
 scan_header([], L)                    -> {no, L}.
 
