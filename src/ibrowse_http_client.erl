@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.13 2007/10/09 00:02:30 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.14 2007/10/19 12:43:48 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -761,7 +761,7 @@ parse_11_response(DataRecvd,
 							  chunk_size=ChunkSize})
 	    end;
 	{no, Data_1} ->
-	    State#state{reply_buffer=Data_1}
+	    State#state{reply_buffer=Data_1, rep_buf_size=length(Data_1)}
     end;
 
 %% This clause is there to remove the CRLF between two chunks
@@ -778,7 +778,10 @@ parse_11_response(DataRecvd,
 	    %%
 	    %% Do we have to preserve the chunk encoding when streaming?
 	    %%
-	    State_1 = State#state{chunk_size=chunk_start, deleted_crlf=true},
+	    State_1 = State#state{chunk_size=chunk_start,
+				  rep_buf_size=0, 
+				  reply_buffer=[],
+				  deleted_crlf=true},
 	    State_2 = case StreamTo of
 			  undefined ->
 			      State_1#state{chunks = [Buf | Chunks]};
@@ -788,7 +791,7 @@ parse_11_response(DataRecvd,
 		      end,
 	    parse_11_response(NextChunk, State_2);
 	{no, Data_1} ->
-	    State#state{reply_buffer=Data_1}
+	    State#state{reply_buffer=Data_1, rep_buf_size=length(Data_1)}
     end;
 
 %% This clause deals with the end of a chunked transfer
@@ -815,7 +818,7 @@ parse_11_response(DataRecvd,
 	    State_1 = handle_response(CurReq, State#state{reqs=Reqs_1}),
 	    parse_response(Rem, reset_state(State_1));
 	{no, Rem} ->
-	    State#state{reply_buffer=Rem, rep_buf_size=length(Rem), chunk_size=tbd}
+	    State#state{reply_buffer=Rem, rep_buf_size=length(Rem), deleted_crlf=false}
     end;
 
 %% This clause extracts a chunk, given the size.
