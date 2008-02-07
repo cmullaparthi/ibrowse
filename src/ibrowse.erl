@@ -61,7 +61,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.4 2007/06/28 22:29:01 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.5 2008/02/07 12:02:13 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -167,7 +167,7 @@ set_dest(Host,Port,Opts) ->
 %% headerName() = string()
 %% headerValue() = string()
 %% response() = {ok, Status, ResponseHeaders, ResponseBody} | {error, Reason}
-%% ResponseBody = string()
+%% ResponseBody = string() | {file, Filename}
 %% Reason = term()
 send_req(Url, Headers, Method) ->
     send_req(Url, Headers, Method, [], []).
@@ -191,6 +191,17 @@ send_req(Url, Headers, Method, Body) ->
 %% make sense to the destination webserver. This option can then be
 %% used to specify what should go in the <code>Host</code> header in
 %% the request.</p>
+%% <ul>
+%% <li>When both the options <code>save_response_to_file</code> and <code>stream_to</code> 
+%% are specified, the former takes precedence.</li>
+%%
+%% <li>For the <code>save_response_to_file</code> option, the response body is saved to
+%% file only if the status code is in the 200-299 range. If not, the response body is returned
+%% as a string.</li>
+%% <li>Whenever an error occurs in the processing of a request, ibrowse will return as much
+%% information as it has, such as HTTP Status Code and HTTP Headers. When this happens, the response
+%% is of the form <code>{error, {Reason, {stat_code, StatusCode}, HTTP_headers}}</code></li>
+%% </ul>
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method(), Body::body(), Options::optionList()) -> response()
 %% optionList() = [option()]
 %% option() = {max_sessions, integer()}        |
@@ -208,7 +219,7 @@ send_req(Url, Headers, Method, Body) ->
 %%          {cookie, string()}                 |
 %%          {content_length, integer()}        |
 %%          {content_type, string()}           |
-%%          {save_response_to_file, boolean()} |
+%%          {save_response_to_file, srtf()}    |
 %%          {stream_to, process()}             |
 %%          {http_vsn, {MajorVsn, MinorVsn}}   |
 %%          {host_header, string()}            |
@@ -219,6 +230,9 @@ send_req(Url, Headers, Method, Body) ->
 %% password() = string()
 %% SSLOpt = term()
 %% ChunkSize = integer()
+%% srtf() = boolean() | filename()
+%% filename() = string()
+%% 
 send_req(Url, Headers, Method, Body, Options) ->
     send_req(Url, Headers, Method, Body, Options, 30000).
 

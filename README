@@ -1,4 +1,4 @@
-$Id: README,v 1.12 2007/10/19 12:43:48 chandrusf Exp $
+$Id: README,v 1.13 2008/02/07 12:02:10 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,12 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+07-02-2008 - Ram Krishnan (kriyative _at_ gmail dot com) sent a simple patch to
+             enable specifying the filename in the save_response_to_file option.
+             When testing the patch, I realised that my original implementation
+             of this feature was quite flaky and a lot of corner cases were 
+             not covered.  Fixed all of them. Thanks Ram!
+
 17-10-2007 - Matthew Reilly (matthew dot reilly _at_ sipphone dot com) 
              sent a bug report and a fix. If the chunk trailer spans two TCP 
              packets, then ibrowse fails to recognise that the chunked transfer

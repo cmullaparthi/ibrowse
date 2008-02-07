@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.14 2007/10/19 12:43:48 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.15 2008/02/07 12:02:13 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -35,11 +35,12 @@
 		reply_buffer=[], rep_buf_size=0, recvd_headers=[],
 		is_closing, send_timer, content_length,
 		deleted_crlf = false, transfer_encoding, chunk_size, 
-		chunks=[], save_response_to_file = false,
-		tmp_file_name, tmp_file_fd}).
+		chunks=[]}).
 
 -record(request, {url, method, options, from,
-		  stream_to, req_id}).
+		  stream_to, req_id,
+		  save_response_to_file = false,
+		  tmp_file_name, tmp_file_fd}).
 
 %%====================================================================
 %% External functions
@@ -122,19 +123,19 @@ handle_info({{send_req, [Url, Headers, Method,
 		   _PHost ->
 		      ProxyUser = get_value(proxy_user, Options, []),
 		      ProxyPassword = get_value(proxy_password, Options, []),
-		      SaveResponseToFile = get_value(save_response_to_file, Options, false),
 		      Digest = http_auth_digest(ProxyUser, ProxyPassword),
 		      State#state{use_proxy = true,
-				  save_response_to_file = SaveResponseToFile,
 				  proxy_auth_digest = Digest}
 	      end,
     StreamTo = get_value(stream_to, Options, undefined),
     ReqId = make_req_id(),
+    SaveResponseToFile = get_value(save_response_to_file, Options, false),
     NewReq = #request{url=Url, 
 		      method=Method,
 		      stream_to=StreamTo,
 		      options=Options, 
 		      req_id=ReqId,
+		      save_response_to_file = SaveResponseToFile,
 		      from=From},
     Reqs = queue:in(NewReq, State#state.reqs),
     State_2 = check_ssl_options(Options, State_1#state{reqs = Reqs}),
@@ -185,12 +186,14 @@ handle_info({{send_req, [Url, Headers, Method,
 	    #state{socket=Sock, status=Status, reqs=Reqs}=State) ->
     do_trace("Recvd request in connected state. Status -> ~p NumPending: ~p~n", [Status, length(queue:to_list(Reqs))]),
     StreamTo = get_value(stream_to, Options, undefined),
+    SaveResponseToFile = get_value(save_response_to_file, Options, false),
     ReqId = make_req_id(),
     NewReq = #request{url=Url, 
 		      stream_to=StreamTo,
 		      method=Method,
 		      options=Options, 
 		      req_id=ReqId,
+		      save_response_to_file = SaveResponseToFile,
 		      from=From},
     State_1 = State#state{reqs=queue:in(NewReq, State#state.reqs)},
     case send_req_1(Url, Headers, Method, Body, Options, Sock, State_1) of
@@ -309,18 +312,16 @@ handle_sock_data(Data, #state{status=get_header, socket=Sock}=State) ->
     end;
 
 handle_sock_data(Data, #state{status=get_body, content_length=CL,
-			      recvd_headers=Headers, cur_req=CurReq,
-			      chunk_size=CSz, reqs=Reqs, socket=Sock}=State) ->
+			      http_status_code = StatCode,
+			      recvd_headers=Headers, 
+			      chunk_size=CSz, socket=Sock}=State) ->
     case (CL == undefined) and (CSz == undefined) of
 	true ->
 	    case accumulate_response(Data, State) of
 		{error, Reason} ->
 		    ibrowse:shutting_down(),
-		    {_, Reqs_1} = queue:out(Reqs),
-		    #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
-		    do_reply(From, StreamTo, ReqId,
-			     {error, {file_open_error, Reason, Headers}}),
-		    do_error_reply(State#state{reqs=Reqs_1}, previous_request_failed),
+		    fail_pipelined_requests(State, 
+					    {error, {Reason, {stat_code, StatCode}, Headers}}),
 		    {stop, normal, State};
 		State_1 ->
 		    do_setopts(Sock, [{active, true}], State#state.is_ssl),
@@ -328,8 +329,10 @@ handle_sock_data(Data, #state{status=get_body, content_length=CL,
 	    end;
 	_ ->
 	    case parse_11_response(Data, State) of
-		{error, _Reason} ->
+		{error, Reason} ->
 		    ibrowse:shutting_down(),
+		    fail_pipelined_requests(State, 
+					    {error, {Reason, {stat_code, StatCode}, Headers}}),
 		    {stop, normal, State};
 		stop ->
 		    ibrowse:shutting_down(),
@@ -340,32 +343,41 @@ handle_sock_data(Data, #state{status=get_body, content_length=CL,
 	    end
     end.
 
-accumulate_response(Data, #state{save_response_to_file = true,
-				 tmp_file_fd = undefined,
-				 http_status_code=[$2 | _]}=State) ->
-    TmpFilename = make_tmp_filename(),
+accumulate_response(Data,
+		    #state{
+		      cur_req = #request{save_response_to_file = SaveResponseToFile,
+					 tmp_file_fd = undefined} = CurReq,
+		      http_status_code=[$2 | _]}=State) when SaveResponseToFile /= false ->
+    TmpFilename = case SaveResponseToFile of
+		      true -> make_tmp_filename();
+		      F -> F
+		  end,
     case file:open(TmpFilename, [write, delayed_write, raw]) of
 	{ok, Fd} ->
-	    accumulate_response(Data, State#state{tmp_file_fd=Fd,
-						  tmp_file_name=TmpFilename});
+	    accumulate_response(Data, State#state{
+					cur_req = CurReq#request{
+						    tmp_file_fd = Fd,
+						    tmp_file_name = TmpFilename}});
 	{error, Reason} ->
 	    {error, {file_open_error, Reason}}
     end;
-accumulate_response(Data, #state{save_response_to_file=true,
+accumulate_response(Data, #state{cur_req = #request{save_response_to_file = SaveResponseToFile,
+						    tmp_file_fd = Fd},
 				 transfer_encoding=chunked,
 				 chunks = Chunks,
-				 http_status_code=[$2 | _],
-				 tmp_file_fd=Fd}=State) ->
+				 http_status_code=[$2 | _]
+				} = State) when SaveResponseToFile /= false ->
     case file:write(Fd, [Chunks | Data]) of
 	ok ->
 	    State#state{chunks = []};
 	{error, Reason} ->
 	    {error, {file_write_error, Reason}}
     end;
-accumulate_response(Data, #state{save_response_to_file=true,
+accumulate_response(Data, #state{cur_req = #request{save_response_to_file = SaveResponseToFile,
+						    tmp_file_fd = Fd},
 				 reply_buffer = RepBuf,
-				 http_status_code=[$2 | _],
-				 tmp_file_fd=Fd}=State) ->
+				 http_status_code=[$2 | _]
+				} = State) when SaveResponseToFile /= false ->
     case file:write(Fd, [RepBuf | Data]) of
 	ok ->
 	    State#state{reply_buffer = []};
@@ -374,8 +386,8 @@ accumulate_response(Data, #state{save_response_to_file=true,
     end;
 accumulate_response([], State) ->
     State;
-accumulate_response(Data, #state{reply_buffer=RepBuf,
-				 cur_req=CurReq}=State) ->
+accumulate_response(Data, #state{reply_buffer = RepBuf,
+				 cur_req = CurReq}=State) ->
     #request{stream_to=StreamTo, req_id=ReqId} = CurReq,
     case StreamTo of
 	undefined ->
@@ -409,8 +421,9 @@ handle_sock_closed(#state{cur_req=undefined}) ->
 %% Connection-Close header and has closed the socket to indicate end
 %% of response. There maybe requests pipelined which need a response.
 handle_sock_closed(#state{reply_buffer=Buf, reqs=Reqs, http_status_code=SC,
-			  is_closing=IsClosing, cur_req=CurReq,
-			  tmp_file_name=TmpFilename, tmp_file_fd=Fd,
+			  is_closing=IsClosing,
+			  cur_req=#request{tmp_file_name=TmpFilename,
+					   tmp_file_fd=Fd} = CurReq,
 			  status=get_body, recvd_headers=Headers}=State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
     case IsClosing of
@@ -635,7 +648,7 @@ parse_response(_Data, #state{cur_req = undefined}=State) ->
 parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 			    cur_req=CurReq}=State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
-	     options = CurReqOptions, method=Method} = CurReq,
+	     method=Method} = CurReq,
     MaxHeaderSize = safe_get_env(ibrowse, max_headers_size, infinity),
     case scan_header(Data, Acc) of
 	{yes, Headers, Data_1}  ->
@@ -652,10 +665,7 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		false ->
 		    ok
 	    end,
-	    SaveResponseToFile = get_value(save_response_to_file, CurReqOptions, false),
 	    State_1 = State#state{recvd_headers=Headers_1, status=get_body, 
-				  save_response_to_file = SaveResponseToFile,
-				  tmp_file_fd = undefined, tmp_file_name = undefined,
 				  http_status_code=StatCode, is_closing=IsClosing},
 	    put(conn_close, ConnClose),
 	    TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
@@ -690,33 +700,47 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		_ when TransferEncoding == "chunked" ->
 		    do_trace("Chunked encoding detected...~n",[]),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
-		    parse_11_response(Data_1, State_1#state{transfer_encoding=chunked,
-							    chunk_size=chunk_start,
-							    reply_buffer=[], chunks=[]});
+		    case parse_11_response(Data_1, State_1#state{transfer_encoding=chunked,
+								 chunk_size=chunk_start,
+								 reply_buffer=[], chunks=[]}) of
+			{error, Reason} ->
+			    fail_pipelined_requests(State_1, 
+						    {error, {Reason,
+							     {stat_code, StatCode}, Headers_1}}),
+			    {error, Reason};
+			State_2 ->
+			    State_2
+		    end;
 		undefined when HttpVsn == "HTTP/1.0";
 			       ConnClose == "close" ->
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 		    State_1#state{reply_buffer=[Data_1]};
 		undefined ->
-		    {_, Reqs_1} = queue:out(Reqs),
-		    do_reply(From, StreamTo, ReqId, 
-			     {error, {content_length_undefined, Headers}}),
-		    do_error_reply(State_1#state{reqs=Reqs_1}, previous_request_failed),
+		    fail_pipelined_requests(State_1, 
+					    {error, {content_length_undefined,
+						     {stat_code, StatCode}, Headers}}),
 		    {error, content_length_undefined};
 		V ->
 		    case catch list_to_integer(V) of
 			V_1 when integer(V_1), V_1 >= 0 ->
 			    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 			    do_trace("Recvd Content-Length of ~p~n", [V_1]),
-			    parse_11_response(Data_1, 
-					      State_1#state{rep_buf_size=0,
-							    reply_buffer=[],
-							    content_length=V_1});
+			    State_2 = State_1#state{rep_buf_size=0,
+						    reply_buffer=[],
+						    content_length=V_1},
+			    case parse_11_response(Data_1, State_2) of
+				{error, Reason} ->
+				    fail_pipelined_requests(State_1, 
+							    {error, {Reason,
+								     {stat_code, StatCode}, Headers_1}}),
+				    {error, Reason};
+				State_3 ->
+				    State_3
+			    end;
 			_ ->
-			    {_, Reqs_1} = queue:out(Reqs),
-			    do_reply(From, StreamTo, ReqId,
-				     {error, {content_length_undefined, Headers}}),
-			    do_error_reply(State_1#state{reqs=Reqs_1}, previous_request_failed),
+			    fail_pipelined_requests(State_1, 
+					    {error, {content_length_undefined,
+						     {stat_code, StatCode}, Headers}}),
 			    {error, content_length_undefined}
 		    end
 	    end;
@@ -725,9 +749,7 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 	{no, Acc_1} when length(Acc_1) < MaxHeaderSize ->
 	    State#state{reply_buffer=Acc_1};
 	{no, _Acc_1} ->
-	    do_reply(From, StreamTo, ReqId, {error, max_headers_size_exceeded}),
-	    {_, Reqs_1} = queue:out(Reqs),
-	    do_error_reply(State#state{reqs=Reqs_1}, previous_request_failed),
+	    fail_pipelined_requests(State, {error, max_headers_size_exceeded}),
 	    {error, max_headers_size_exceeded}
     end.
 
@@ -835,6 +857,7 @@ parse_11_response(DataRecvd,
 	    do_trace("RemData -> ~p~n", [RemData]),
 	    case accumulate_response(RemChunk, State) of
 		{error, Reason} ->
+		    do_trace("Error accumulating response --> ~p~n", [Reason]),
 		    {error, Reason};
 		#state{reply_buffer = NewRepBuf,
 		       chunks = NewChunks} = State_1 ->
@@ -867,18 +890,34 @@ parse_11_response(DataRecvd,
 	    accumulate_response(DataRecvd, State#state{rep_buf_size=RepBufSz+DataLen})
     end.
 
-handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId}, 
-		#state{save_response_to_file = true, 
-		       http_status_code=SCode,
-		       tmp_file_name=TmpFilename,
-		       tmp_file_fd=Fd,
-		       send_timer=ReqTimer,
-		       recvd_headers = RespHeaders}=State) ->
+handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
+			 save_response_to_file = SaveResponseToFile, 
+			 tmp_file_name = TmpFilename,
+			 tmp_file_fd = Fd
+			},
+		#state{http_status_code = SCode,
+		       send_timer = ReqTimer,
+		       reply_buffer = RepBuf,
+		       transfer_encoding = TEnc,
+		       chunks = Chunks,
+		       recvd_headers = RespHeaders}=State) when SaveResponseToFile /= false ->
+    Body = case TEnc of
+	       chunked ->
+		   lists:flatten(lists:reverse(Chunks));
+	       _ ->
+		   lists:flatten(lists:reverse(RepBuf))
+	   end,
     State_1 = set_cur_request(State),
     file:close(Fd),
-    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, {file, TmpFilename}}),
+    ResponseBody = case TmpFilename of
+		       undefined ->
+			   Body;
+		       _ ->
+			   {file, TmpFilename}
+		   end,
+    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, ResponseBody}),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
-    State_1#state{tmp_file_name=undefined, tmp_file_fd=undefined};
+    State_1;
 handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 		#state{http_status_code=SCode, recvd_headers=RespHeaders,
 		       reply_buffer=RepBuf, transfer_encoding=TEnc,
@@ -1193,7 +1232,14 @@ do_error_reply(#state{reqs = Reqs}, Err) ->
     lists:foreach(fun(#request{from=From, stream_to=StreamTo, req_id=ReqId}) ->
                           do_reply(From, StreamTo, ReqId, {error, Err})
 		  end, ReqList).
-    
+
+fail_pipelined_requests(#state{reqs = Reqs, cur_req = CurReq} = State, Reply) ->
+    {_, Reqs_1} = queue:out(Reqs),
+    #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
+    do_reply(From, StreamTo, ReqId, Reply),
+    do_error_reply(State#state{reqs = Reqs_1}, previous_request_failed).
+
+
 split_list_at(List, N) ->
     split_list_at(List, N, []).
 split_list_at([], _, Acc) ->
@@ -1308,3 +1354,4 @@ to_lower([H|T], Acc) ->
     to_lower(T, [H|Acc]);
 to_lower([], Acc) ->
     lists:reverse(Acc).
+
