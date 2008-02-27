@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.15 2008/02/07 12:02:13 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.16 2008/02/27 23:39:23 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -874,7 +874,6 @@ parse_11_response(DataRecvd,
 %% This clause to extract the body when Content-Length is specified
 parse_11_response(DataRecvd, 
 		  #state{content_length=CL, rep_buf_size=RepBufSz, 
-			 cur_req = CurReq,
 			 reqs=Reqs}=State) ->
     NeedBytes = CL - RepBufSz,
     DataLen = length(DataRecvd),
@@ -883,7 +882,7 @@ parse_11_response(DataRecvd,
 	    {RemBody, Rem} = split_list_at(DataRecvd, NeedBytes),
 	    {_, Reqs_1} = queue:out(Reqs),
 	    State_1 = accumulate_response(RemBody, State),
-	    State_2 = handle_response(CurReq, State_1#state{reqs=Reqs_1}),
+	    State_2 = handle_response(State_1#state.cur_req, State_1#state{reqs=Reqs_1}),
 	    State_3 = reset_state(State_2),
 	    parse_response(Rem, State_3);
 	false ->

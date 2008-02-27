@@ -1,4 +1,4 @@
-$Id: README,v 1.13 2008/02/07 12:02:10 chandrusf Exp $
+$Id: README,v 1.14 2008/02/27 23:39:22 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,9 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+20-02-2008 - Ram Krishnan sent another patch for another hidden bug in the
+             save_response_to_file feature.
+
 07-02-2008 - Ram Krishnan (kriyative _at_ gmail dot com) sent a simple patch to
              enable specifying the filename in the save_response_to_file option.
              When testing the patch, I realised that my original implementation
