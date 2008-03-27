@@ -5,21 +5,34 @@
 %% @doc Module with a few useful functions
 
 -module(ibrowse_lib).
--vsn('$Id: ibrowse_lib.erl,v 1.5 2007/04/20 00:36:30 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_lib.erl,v 1.6 2008/03/27 01:35:50 chandrusf Exp $ ').
 -author('chandru').
 -ifdef(debug).
 -compile(export_all).
 -endif.
 
--export([url_encode/1,
+-include("ibrowse.hrl").
+
+-export([
+	 get_trace_status/2,
+	 do_trace/2,
+	 do_trace/3,
+	 url_encode/1,
 	 decode_rfc822_date/1,
 	 status_code/1,
 	 dec2hex/2,
 	 drv_ue/1,
 	 drv_ue/2,
 	 encode_base64/1,
-	 decode_base64/1
+	 decode_base64/1,
+	 get_value/2,
+	 get_value/3,
+	 parse_url/1,
+	 printable_date/0
 	]).
+
+get_trace_status(Host, Port) ->
+    ibrowse:get_config_value({trace, Host, Port}, false).
 
 drv_ue(Str) ->
     [{port, Port}| _] = ets:lookup(ibrowse_table, port),
@@ -53,7 +66,7 @@ url_encode_char([X | T], Acc) ->
     url_encode_char(T, [$%, d2h(X bsr 4), d2h(X band 16#0f) | Acc]);
 url_encode_char([], Acc) ->
     Acc.
-    
+
 d2h(N) when N<10 -> N+$0;
 d2h(N) -> N+$a-10.
 
@@ -238,3 +251,149 @@ b64_to_int(X) when X >= $a, X =< $z -> X - $a + 26;
 b64_to_int(X) when X >= $0, X =< $9 -> X - $0 + 52;
 b64_to_int($+) -> 62;
 b64_to_int($/) -> 63.
+
+get_value(Tag, TVL, DefVal) ->
+    case lists:keysearch(Tag, 1, TVL) of
+	false ->
+	    DefVal;
+	{value, {_, Val}} ->
+	    Val
+    end.
+
+get_value(Tag, TVL) ->
+    {value, {_, V}} = lists:keysearch(Tag,1,TVL),
+    V.
+
+parse_url(Url) ->
+    parse_url(Url, get_protocol, #url{abspath=Url}, []).
+
+parse_url([$:, $/, $/ | _], get_protocol, Url, []) ->
+    {invalid_uri_1, Url};
+parse_url([$:, $/, $/ | T], get_protocol, Url, TmpAcc) ->
+    Prot = list_to_atom(lists:reverse(TmpAcc)),
+    parse_url(T, get_username, 
+	      Url#url{protocol = Prot},
+	      []);
+parse_url([$/ | T], get_username, Url, TmpAcc) ->
+    %% No username/password. No  port number
+    Url#url{host = lists:reverse(TmpAcc),
+	    port = default_port(Url#url.protocol),
+	    path = [$/ | T]};
+parse_url([$: | T], get_username, Url, TmpAcc) ->
+    %% It is possible that no username/password has been
+    %% specified. But we'll continue with the assumption that there is
+    %% a username/password. If we encounter a '@' later on, there is a
+    %% username/password indeed. If we encounter a '/', it was
+    %% actually the hostname
+    parse_url(T, get_password, 
+	      Url#url{username = lists:reverse(TmpAcc)},
+	      []);
+parse_url([$@ | T], get_username, Url, TmpAcc) ->
+    parse_url(T, get_host, 
+	      Url#url{username = lists:reverse(TmpAcc),
+		      password = ""},
+	      []);
+parse_url([$@ | T], get_password, Url, TmpAcc) ->
+    parse_url(T, get_host, 
+	      Url#url{password = lists:reverse(TmpAcc)},
+	      []);
+parse_url([$/ | T], get_password, Url, TmpAcc) ->
+    %% Ok, what we thought was the username/password was the hostname
+    %% and portnumber
+    #url{username=User} = Url,
+    Port = list_to_integer(lists:reverse(TmpAcc)),
+    Url#url{host = User,
+	    port = Port,
+	    username = undefined,
+	    password = undefined,
+	    path = [$/ | T]};
+parse_url([$: | T], get_host, #url{} = Url, TmpAcc) ->
+    parse_url(T, get_port, 
+	      Url#url{host = lists:reverse(TmpAcc)},
+	      []);
+parse_url([$/ | T], get_host, #url{protocol=Prot} = Url, TmpAcc) ->
+    Url#url{host = lists:reverse(TmpAcc),
+	    port = default_port(Prot),
+	    path = [$/ | T]};
+parse_url([$/ | T], get_port, #url{protocol=Prot} = Url, TmpAcc) ->
+    Port = case TmpAcc of
+	       [] ->
+		   default_port(Prot);
+	       _ ->
+		   list_to_integer(lists:reverse(TmpAcc))
+	   end,
+    Url#url{port = Port, path = [$/ | T]};
+parse_url([H | T], State, Url, TmpAcc) ->
+    parse_url(T, State, Url, [H | TmpAcc]);
+parse_url([], get_host, Url, TmpAcc) when TmpAcc /= [] ->
+    Url#url{host = lists:reverse(TmpAcc),
+	    port = default_port(Url#url.protocol),
+	    path = "/"};
+parse_url([], get_username, Url, TmpAcc) when TmpAcc /= [] ->
+    Url#url{host = lists:reverse(TmpAcc),
+	    port = default_port(Url#url.protocol),
+	    path = "/"};
+parse_url([], get_port, #url{protocol=Prot} = Url, TmpAcc) ->
+    Port = case TmpAcc of
+	       [] ->
+		   default_port(Prot);
+	       _ ->
+		   list_to_integer(lists:reverse(TmpAcc))
+	   end,
+    Url#url{port = Port, 
+	    path = "/"};
+parse_url([], get_password, Url, TmpAcc) ->
+    %% Ok, what we thought was the username/password was the hostname
+    %% and portnumber
+    #url{username=User} = Url,
+    Port = case TmpAcc of
+	       [] ->
+		   default_port(Url#url.protocol);
+	       _ ->
+		   list_to_integer(lists:reverse(TmpAcc))
+	   end,
+    Url#url{host = User,
+	    port = Port,
+	    username = undefined,
+	    password = undefined,
+	    path = "/"};
+parse_url([], State, Url, TmpAcc) ->
+    {invalid_uri_2, State, Url, TmpAcc}.
+
+default_port(http)  -> 80;
+default_port(https) -> 443;
+default_port(ftp)   -> 21.
+
+printable_date() ->
+    {{Y,Mo,D},{H, M, S}} = calendar:local_time(),
+    {_,_,MicroSecs} = now(),
+    [integer_to_list(Y),
+     $-,
+     integer_to_list(Mo),
+     $-,
+     integer_to_list(D),
+     $_,
+     integer_to_list(H),
+     $:,
+     integer_to_list(M),
+     $:,
+     integer_to_list(S),
+     $:,
+     integer_to_list(MicroSecs div 1000)].
+
+do_trace(Fmt, Args) ->
+    do_trace(get(my_trace_flag), Fmt, Args).
+
+-ifdef(DEBUG).
+do_trace(_, Fmt, Args) ->
+    io:format("~s -- (~s) - "++Fmt,
+	      [printable_date(), 
+	       get(ibrowse_trace_token) | Args]).
+-else.
+do_trace(true, Fmt, Args) ->
+    io:format("~s -- (~s) - "++Fmt,
+	      [printable_date(), 
+	       get(ibrowse_trace_token) | Args]);
+do_trace(_, _, _) ->
+    ok.
+-endif.

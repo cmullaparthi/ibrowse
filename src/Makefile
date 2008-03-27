@@ -3,6 +3,7 @@ ERL_FILES = ibrowse.erl \
 		ibrowse_app.erl \
 		ibrowse_sup.erl \
 		ibrowse_lib.erl \
+		ibrowse_lb.erl \
 		ibrowse_test.erl
 
 

@@ -6,11 +6,11 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 %% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
-%% @copyright 2005-2007 Chandrashekhar Mullaparthi
-%% @version 1.2.7
+%% @copyright 2005-2008 Chandrashekhar Mullaparthi
+%% @version 1.4
 %% @doc The ibrowse application implements an HTTP 1.1 client. This
 %% module implements the API of the HTTP client. There is one named
-%% process called 'ibrowse' which acts as a load balancer. There is
+%% process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is
 %% one process to handle one TCP connection to a webserver
 %% (implemented in the module ibrowse_http_client). Multiple connections to a
 %% webserver are setup based on the settings for each webserver. The
@@ -39,10 +39,6 @@
 %% 		  {save_response_to_file, true}], 1000).
 %% <br/><br/>
 %%
-%% ibrowse:set_dest("www.hotmail.com", 80, [{max_sessions, 10},
-%% 					    {max_pipeline_size, 1}]).
-%% <br/><br/>
-%%
 %% ibrowse:send_req("http://www.erlang.org", [], head).
 %%
 %% <br/><br/>
@@ -61,7 +57,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.5 2008/02/07 12:02:13 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.6 2008/03/27 01:35:50 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -77,45 +73,50 @@
 	 terminate/2, code_change/3]).
 
 %% API interface
--export([send_req/3,
+-export([
+	 rescan_config/0,
+	 rescan_config/1,
+	 get_config_value/1,
+	 get_config_value/2,
+	 spawn_worker_process/2,
+	 spawn_link_worker_process/2,
+	 stop_worker_process/1,
+	 send_req/3,
 	 send_req/4,
 	 send_req/5,
 	 send_req/6,
+	 send_req_direct/4,
+	 send_req_direct/5,
+	 send_req_direct/6,
+	 send_req_direct/7,
+	 set_max_sessions/3,
+	 set_max_pipeline_size/3,
+	 set_dest/3,
 	 trace_on/0,
 	 trace_off/0,
 	 trace_on/2,
 	 trace_off/2,
-	 set_dest/3]).
-
-%% Internal exports
--export([reply/2,
-	 finished_async_request/0,
-	 shutting_down/0]).
+	 show_dest_status/2
+	]).
 
 -ifdef(debug).
 -compile(export_all).
 -endif.
 
--import(ibrowse_http_client, [parse_url/1,
-			      printable_date/0]).
-
--record(state, {dests=[], trace=false, port}).
+-import(ibrowse_lib, [
+		      parse_url/1,
+		      printable_date/0,
+		      get_value/2,
+		      get_value/3,
+		      do_trace/2
+		     ]).
+		      
+-record(state, {trace = false}).
 
 -include("ibrowse.hrl").
 
 -define(DEF_MAX_SESSIONS,10).
 -define(DEF_MAX_PIPELINE_SIZE,10).
-
-%% key = {Host, Port} where Host is a string, or {Name, Host, Port} 
-%% where Name is an atom.
-%% conns = queue()
--record(dest, {key,
-	       conns=queue:new(),
-	       num_sessions=0,
-	       max_sessions=?DEF_MAX_SESSIONS, 
-	       max_pipeline_size=?DEF_MAX_PIPELINE_SIZE,
-	       options=[],
-	       trace=false}).
 
 %%====================================================================
 %% External functions
@@ -124,35 +125,18 @@
 %% Function: start_link/0
 %% Description: Starts the server
 %%--------------------------------------------------------------------
+%% @doc Starts the ibrowse process linked to the calling process. Usually invoked by the supervisor ibrowse_sup
+%% @spec start_link() -> {ok, pid()}
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Starts the ibrowse process without linking. Useful when testing using the shell
 start() ->
     gen_server:start({local, ?MODULE}, ?MODULE, [], [{debug, []}]).
 
+%% @doc Stop the ibrowse process. Useful when testing using the shell.
 stop() ->
     catch gen_server:call(ibrowse, stop).
-
-%% @doc Sets options for a destination. If the options have not been
-%% set in the ibrowse.conf file, it can be set using this function
-%% before sending the first request to the destination. If not,
-%% defaults will be used. Entries in ibrowse.conf look like this.
-%% <code><br/>
-%% {dest, Host, Port, MaxSess, MaxPipe, Options}.<br/>
-%% where <br/>
-%% Host = string(). "www.erlang.org" | "193.180.168.23"<br/>
-%% Port = integer()<br/>
-%% MaxSess = integer()<br/>
-%% MaxPipe = integer()<br/>
-%% Options = optionList() -- see options in send_req/5<br/>
-%% </code>
-%% @spec set_dest(Host::string(),Port::integer(),Opts::opt_list()) -> ok
-%% opt_list() = [opt]
-%% opt() = {max_sessions, integer()}          | 
-%%         {max_pipeline_size, integer()}     |
-%%         {trace, boolean()}
-set_dest(Host,Port,Opts) ->
-    gen_server:call(?MODULE,{set_dest,Host,Port,Opts}).
 
 %% @doc This is the basic function to send a HTTP request.
 %% The Status return value indicates the HTTP status code returned by the webserver
@@ -173,9 +157,12 @@ send_req(Url, Headers, Method) ->
     send_req(Url, Headers, Method, [], []).
 
 %% @doc Same as send_req/3. 
-%% If a list is specified for the body it has to be a flat list.
+%% If a list is specified for the body it has to be a flat list. The body can also be a fun/0 or a fun/1. <br/>
+%% If fun/0, the connection handling process will repeatdely call the fun until it returns an error or eof. <pre>Fun() = {ok, Data} | eof</pre><br/>
+%% If fun/1, the connection handling process will repeatedly call the fun with the supplied state until it returns an error or eof. <pre>Fun(State) = {ok, Data} | {ok, Data, NewState} | eof</pre>
 %% @spec send_req(Url, Headers, Method::method(), Body::body()) -> response()
-%% body() = [] | string() | binary()
+%% body() = [] | string() | binary() | fun_arity_0() | {fun_arity_1(), initial_state()}
+%% initial_state() = term()
 send_req(Url, Headers, Method, Body) ->
     send_req(Url, Headers, Method, Body, []).
 
@@ -241,22 +228,143 @@ send_req(Url, Headers, Method, Body, Options) ->
 %% @spec send_req(Url, Headers::headerList(), Method::method(), Body::body(), Options::optionList(), Timeout) -> response()
 %% Timeout = integer() | infinity
 send_req(Url, Headers, Method, Body, Options, Timeout) ->
-    Timeout_1 = case Timeout of
-		    infinity ->
-			infinity;
-		    _ ->
-			Timeout + 1000
+    case catch parse_url(Url) of
+	#url{host = Host,
+	     port = Port} = Parsed_url ->
+	    Lb_pid = case ets:lookup(ibrowse_lb, {Host, Port}) of
+			 [] ->
+			     get_lb_pid(Parsed_url);
+			 [#lb_pid{pid = Lb_pid_1}] ->
+			     Lb_pid_1
+		     end,
+	    Max_sessions = get_max_sessions(Host, Port, Options),
+	    Max_pipeline_size = get_max_pipeline_size(Host, Port, Options),
+	    {SSLOptions, IsSSL} =
+		case get_value(is_ssl, Options, false) of
+		    false -> {[], false};
+		    true -> {get_value(ssl_options, Options), true}
 		end,
-    case catch gen_server:call(ibrowse,
-			       {send_req, [Url, Headers, Method,
-					   Body, Options, Timeout]},
-			       Timeout_1) of
-	{'EXIT', {timeout, _}} ->
-	    {error, genserver_timedout};
-	Res ->
-	    Res
+	    case ibrowse_lb:spawn_connection(Lb_pid, Parsed_url,
+					     Max_sessions, 
+					     Max_pipeline_size,
+					     {SSLOptions, IsSSL}) of
+		{ok, Conn_Pid} ->
+		    do_send_req(Conn_Pid, Parsed_url, Headers,
+				Method, Body, Options, Timeout);
+		Err ->
+		    Err
+	    end;
+	Err ->
+	    {error, {url_parsing_failed, Err}}
     end.
 
+get_lb_pid(Url) ->
+    gen_server:call(?MODULE, {get_lb_pid, Url}).
+
+get_max_sessions(Host, Port, Options) ->
+    get_value(max_sessions, Options,
+	      get_config_value({max_sessions, Host, Port}, ?DEF_MAX_SESSIONS)).
+
+get_max_pipeline_size(Host, Port, Options) ->
+    get_value(max_pipeline_size, Options,
+	      get_config_value({max_pipeline_size, Host, Port}, ?DEF_MAX_PIPELINE_SIZE)).
+
+%% @doc Deprecated. Use set_max_sessions/3 and set_max_pipeline_size/3
+%% for achieving the same effect.
+set_dest(Host, Port, [{max_sessions, Max} | T]) ->
+    set_max_sessions(Host, Port, Max),
+    set_dest(Host, Port, T);
+set_dest(Host, Port, [{max_pipeline_size, Max} | T]) ->
+    set_max_pipeline_size(Host, Port, Max),
+    set_dest(Host, Port, T);
+set_dest(Host, Port, [{trace, Bool} | T]) when Bool == true; Bool == false ->
+    ibrowse ! {trace, true, Host, Port},
+    set_dest(Host, Port, T);
+set_dest(_Host, _Port, [H | _]) ->
+    exit({invalid_option, H});
+set_dest(_, _, []) ->
+    ok.
+    
+%% @doc Set the maximum number of connections allowed to a specific Host:Port.
+%% @spec set_max_sessions(Host::string(), Port::integer(), Max::integer()) -> ok
+set_max_sessions(Host, Port, Max) when is_integer(Max), Max > 0 ->
+    gen_server:call(?MODULE, {set_config_value, {max_sessions, Host, Port}, Max}).
+
+%% @doc Set the maximum pipeline size for each connection to a specific Host:Port.
+%% @spec set_max_pipeline_size(Host::string(), Port::integer(), Max::integer()) -> ok
+set_max_pipeline_size(Host, Port, Max) when is_integer(Max), Max > 0 ->
+    gen_server:call(?MODULE, {set_config_value, {max_pipeline_size, Host, Port}, Max}).
+
+do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
+    case catch ibrowse_http_client:send_req(Conn_Pid, Parsed_url,
+					    Headers, Method, Body,
+					    Options, Timeout) of
+	{'EXIT', {timeout, _}} ->
+	    {error, req_timedout};
+	{'EXIT', Reason} ->
+	    {error, {'EXIT', Reason}};
+	Ret ->
+	    Ret
+    end.
+
+%% @doc Creates a HTTP client process to the specified Host:Port which
+%% is not part of the load balancing pool. This is useful in cases
+%% where some requests to a webserver might take a long time whereas
+%% some might take a very short time. To avoid getting these quick
+%% requests stuck in the pipeline behind time consuming requests, use
+%% this function to get a handle to a connection process. <br/>
+%% <b>Note:</b> Calling this function only creates a worker process. No connection
+%% is setup. The connection attempt is made only when the first
+%% request is sent via any of the send_req_direct/4,5,6,7 functions.<br/>
+%% <b>Note:</b> It is the responsibility of the calling process to control
+%% pipeline size on such connections.
+%%
+%% @spec spawn_worker_process(Host::string(), Port::integer()) -> {ok, pid()}
+spawn_worker_process(Host, Port) ->
+    ibrowse_http_client:start({Host, Port}).
+
+%% @doc Same as spawn_worker_process/2 except the the calling process
+%% is linked to the worker process which is spawned.
+spawn_link_worker_process(Host, Port) ->
+    ibrowse_http_client:start_link({Host, Port}).
+
+%% @doc Terminate a worker process spawned using
+%% spawn_worker_process/2 or spawn_link_worker_process/2. Requests in
+%% progress will get the error response <pre>{error, closing_on_request}</pre>
+%% @spec stop_worker_process(Conn_pid::pid()) -> ok
+stop_worker_process(Conn_pid) ->
+    ibrowse_http_client:stop(Conn_pid).
+
+%% @doc Same as send_req/3 except that the first argument is the PID
+%% returned by spawn_worker_process/2 or spawn_link_worker_process/2
+send_req_direct(Conn_pid, Url, Headers, Method) ->
+    send_req_direct(Conn_pid, Url, Headers, Method, [], []).
+
+%% @doc Same as send_req/4 except that the first argument is the PID
+%% returned by spawn_worker_process/2 or spawn_link_worker_process/2
+send_req_direct(Conn_pid, Url, Headers, Method, Body) ->
+    send_req_direct(Conn_pid, Url, Headers, Method, Body, []).
+
+%% @doc Same as send_req/5 except that the first argument is the PID
+%% returned by spawn_worker_process/2 or spawn_link_worker_process/2
+send_req_direct(Conn_pid, Url, Headers, Method, Body, Options) ->
+    send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, 30000).
+
+%% @doc Same as send_req/6 except that the first argument is the PID
+%% returned by spawn_worker_process/2 or spawn_link_worker_process/2
+send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
+    case catch parse_url(Url) of
+	#url{} = Parsed_url ->
+	    case do_send_req(Conn_pid, Parsed_url, Headers, Method, Body, Options, Timeout) of
+		{error, {'EXIT', {noproc, _}}} ->
+		    {error, worker_is_dead};
+		Ret ->
+		    Ret
+	    end;
+	Err ->
+	    {error, {url_parsing_failed, Err}}
+    end.
+    
 %% @doc Turn tracing on for the ibrowse process
 trace_on() ->
     ibrowse ! {trace, true}.
@@ -278,23 +386,53 @@ trace_on(Host, Port) ->
 trace_off(Host, Port) ->
     ibrowse ! {trace, false, Host, Port}.
 
-%% @doc Internal export. Called by a HTTP connection process to
-%% indicate to the load balancing process (ibrowse) that a synchronous
-%% request has finished processing.
-reply(OrigCaller, Reply) ->
-    gen_server:call(ibrowse, {reply, OrigCaller, Reply, self()}).
+%% @doc Shows some internal information about load balancing to a
+%% specified Host:Port. Info about workers spawned using
+%% spawn_worker_process/2 or spawn_link_worker_process/2 is not
+%% included.
+show_dest_status(Host, Port) ->
+    case ets:lookup(ibrowse_lb, {Host, Port}) of
+	[] ->
+	    no_active_processes;
+	[#lb_pid{pid = Lb_pid}] ->
+	    io:format("Load Balancer Pid     : ~p~n", [Lb_pid]),
+	    io:format("LB process msg q size : ~p~n", [(catch process_info(Lb_pid, message_queue_len))]),
+	    case lists:dropwhile(
+		   fun(Tid) ->
+			   ets:info(Tid, owner) /= Lb_pid
+		   end, ets:all()) of
+		[] ->
+		    io:format("Couldn't locate ETS table for ~p~n", [Lb_pid]);
+		[Tid | _] ->
+		    First = ets:first(Tid),
+		    Last = ets:last(Tid),
+		    Size = ets:info(Tid, size),
+		    io:format("LB ETS table id       : ~p~n", [Tid]),
+		    io:format("Num Connections       : ~p~n", [Size]),
+		    case Size of
+			0 ->
+			    ok;
+			_ ->
+			    {First_p_sz, _} = First,
+			    {Last_p_sz, _} = Last,
+			    io:format("Smallest pipeline     : ~1000.p~n", [First_p_sz]),
+			    io:format("Largest pipeline      : ~1000.p~n", [Last_p_sz])
+		    end
+	    end
+    end.
 
-%% @doc Internal export. Called by a HTTP connection process to
-%% indicate to the load balancing process (ibrowse) that an
-%% asynchronous request has finished processing.
-finished_async_request() ->
-    gen_server:call(ibrowse, {finished_async_request, self()}).
+%% @doc Clear current configuration for ibrowse and load from the file
+%% ibrowse.conf in the IBROWSE_EBIN/../priv directory. Current
+%% configuration is cleared only if the ibrowse.conf file is readable
+%% using file:consult/1
+rescan_config() ->
+    gen_server:call(?MODULE, rescan_config).
 
-%% @doc Internal export. Called by a HTTP connection process to
-%% indicate to ibrowse that it is shutting down and further requests
-%% should not be sent it's way.
-shutting_down() ->
-    gen_server:call(ibrowse, {shutting_down, self()}).
+%% Clear current configuration for ibrowse and load from the specified
+%% file. Current configuration is cleared only if the specified
+%% file is readable using file:consult/1
+rescan_config(File) when is_list(File) ->
+    gen_server:call(?MODULE, {rescan_config, File}).
 
 %%====================================================================
 %% Server functions
@@ -312,32 +450,66 @@ init(_) ->
     process_flag(trap_exit, true),
     State = #state{},
     put(my_trace_flag, State#state.trace),
+    put(ibrowse_trace_token, "ibrowse"),
+    ets:new(ibrowse_lb, [named_table, public, {keypos, 2}]),
+    ets:new(ibrowse_conf, [named_table, protected, {keypos, 2}]),
+    import_config(),
+    {ok, #state{}}.
+
+import_config() ->
     case code:priv_dir(ibrowse) of
-	{error, _} ->
-	    {ok, #state{}};
+	{error, _} = Err ->
+	    Err;
 	PrivDir ->
 	    Filename = filename:join(PrivDir, "ibrowse.conf"),
-	    case file:consult(Filename) of
-		{ok, Terms} ->
-		    Fun = fun({dest, Host, Port, MaxSess, MaxPipe, Options}, Acc) 
-			     when list(Host), integer(Port),
-			     integer(MaxSess), MaxSess > 0,
-			     integer(MaxPipe), MaxPipe > 0, list(Options) ->
-				  Key = maybe_named_key(Host, Port, Options),
-				  NewDest = #dest{key=Key,
-						  options=Options,
-						  max_sessions=MaxSess,
-						  max_pipeline_size=MaxPipe},
-				  [NewDest | Acc];
-			     (_, Acc) ->
-				  Acc
-			  end,
-		    {ok, #state{dests=lists:foldl(Fun, [], Terms)}};
-		_Else ->
-		    {ok, #state{}}
-	    end
+	    import_config(Filename)
     end.
 
+import_config(Filename) ->
+    case file:consult(Filename) of
+	{ok, Terms} ->
+	    ets:delete_all_objects(ibrowse_conf),
+	    Fun = fun({dest, Host, Port, MaxSess, MaxPipe, Options}) 
+		     when list(Host), integer(Port),
+		     integer(MaxSess), MaxSess > 0,
+		     integer(MaxPipe), MaxPipe > 0, list(Options) ->
+			  I = [{{max_sessions, Host, Port}, MaxSess},
+			       {{max_pipeline_size, Host, Port}, MaxPipe},
+			       {{options, Host, Port}, Options}],
+			  lists:foreach(
+			    fun({X, Y}) ->
+				    ets:insert(ibrowse_conf,
+					       #ibrowse_conf{key = X, 
+							     value = Y})
+			    end, I);
+		     ({K, V}) ->
+			  ets:insert(ibrowse_conf,
+				     #ibrowse_conf{key = K,
+						   value = V});
+		     (X) ->
+			  io:format("Skipping unrecognised term: ~p~n", [X])
+		  end,
+	    lists:foreach(Fun, Terms);
+	Err ->
+	    Err
+    end.
+
+%% @doc Internal export
+get_config_value(Key) ->
+    [#ibrowse_conf{value = V}] = ets:lookup(ibrowse_conf, Key),
+    V.
+
+%% @doc Internal export
+get_config_value(Key, DefVal) ->
+    case ets:lookup(ibrowse_conf, Key) of
+	[] ->
+	    DefVal;
+	[#ibrowse_conf{value = V}] ->
+	    V
+    end.
+
+set_config_value(Key, Val) ->
+    ets:insert(ibrowse_conf, #ibrowse_conf{key = Key, value = Val}).
 %%--------------------------------------------------------------------
 %% Function: handle_call/3
 %% Description: Handling call messages
@@ -348,46 +520,28 @@ init(_) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-handle_call({send_req, _}=Req, From, State) ->
-    State_1 = handle_send_req(Req, From, State),
-    {noreply, State_1};
-		    
-handle_call({reply, OrigCaller, Reply, HttpClientPid}, From, State) ->
-    gen_server:reply(From, ok),
-    gen_server:reply(OrigCaller, Reply),
-    Key = {HttpClientPid, pending_reqs},
-    case get(Key) of
-        NumPend when integer(NumPend) ->
-            put(Key, NumPend - 1);
-        _ ->
-            ok
-    end,
-    {noreply, State};
-
-handle_call({finished_async_request, HttpClientPid}, From, State) ->
-    gen_server:reply(From, ok),
-    Key = {HttpClientPid, pending_reqs},
-    case get(Key) of
-        NumPend when integer(NumPend) ->
-            put(Key, NumPend - 1);
-        _ ->
-            ok
-    end,
-    {noreply, State};
-
-handle_call({shutting_down, Pid}, _From, State) ->
-    State_1 = handle_conn_closing(Pid, State),
-    {reply, ok, State_1};
-    
-handle_call({set_dest,Host,Port,Opts}, _From, State) ->
-    State2 = set_destI(State,Host,Port,Opts),
-    {reply, ok, State2};
+handle_call({get_lb_pid, #url{host = Host, port = Port} = Url}, _From, State) ->
+    Pid = do_get_connection(Url, ets:lookup(ibrowse_lb, {Host, Port})),
+    {reply, Pid, State};
 
 handle_call(stop, _From, State) ->
-    {stop, shutting_down, ok, State};
+    do_trace("IBROWSE shutting down~n", []),
+    {stop, normal, ok, State};
 
-handle_call(_Request, _From, State) ->
-    Reply = ok,
+handle_call({set_config_value, Key, Val}, _From, State) ->
+    set_config_value(Key, Val),
+    {reply, ok, State};
+
+handle_call(rescan_config, _From, State) ->
+    Ret = (catch import_config()),
+    {reply, Ret, State};
+
+handle_call({rescan_config, File}, _From, State) ->
+    Ret = (catch import_config(File)),
+    {reply, Ret, State};
+
+handle_call(Request, _From, State) ->
+    Reply = {unknown_request, Request},
     {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
@@ -408,53 +562,27 @@ handle_cast(_Msg, State) ->
 %%          {noreply, State, Timeout} |
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-%% A bit of a bodge here...ideally, would be good to store connection state 
-%% in the queue itself against each Pid.
-handle_info({done_req, Pid}, State) ->
-    Key = {Pid, pending_reqs},
-    case get(Key) of
-	NumPend when integer(NumPend) ->
-	    put(Key, NumPend - 1);
-	_ ->
-	    ok
-    end,
-    do_trace("~p has finished a request~n", [Pid]),
-    {noreply, State};
-
-handle_info({'EXIT', _, normal}, State) ->
-    {noreply, State};
-
-handle_info({'EXIT', Pid, _Reason}, State) ->
-    %% TODO: We have to reply to all the pending requests
-    State_1 = handle_conn_closing(Pid, State),
-    do_trace("~p has exited~n", [Pid]),
-    {noreply, State_1};
-	
-handle_info({shutting_down, Pid}, State) ->
-    State_1 = handle_conn_closing(Pid, State),
-    {noreply, State_1};
-
-handle_info({conn_closing, Pid, OriReq, From}, State) ->
-    State_1 = handle_conn_closing(Pid, State),
-    State_2 = handle_send_req(OriReq, From, State_1),
-    {noreply, State_2};
-
 handle_info({trace, Bool}, State) ->
     put(my_trace_flag, Bool),
-    {noreply, State#state{trace=Bool}};
+    {noreply, State};
 
-handle_info({trace, Bool, Host, Port}, #state{dests=Dests}=State) ->
-    case lists:keysearch({Host, Port}, #dest.key, Dests) of
-	{value, Dest} ->
-	    lists:foreach(fun(ConnPid) ->
-				  ConnPid ! {trace, Bool}
-			  end, queue:to_list(Dest#dest.conns)),
-	    {noreply, State#state{dests=lists:keyreplace({Host,Port}, #dest.key, Dests, Dest#dest{trace=Bool})}};
-	false ->
-	    do_trace("Not found any state information for specified Host, Port.~n", []),
-	    {noreply, State}
-    end;
-
+handle_info({trace, Bool, Host, Port}, State) ->
+    Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _)
+	     when H == Host,
+		  P == Port ->
+		  catch Pid ! {trace, Bool};
+	     (#client_conn{key = {H, P, Pid}}, _)
+	     when H == Host,
+		  P == Port ->
+		  catch Pid ! {trace, Bool};
+	     (_, Acc) ->
+		  Acc
+	  end,
+    ets:foldl(Fun, undefined, ibrowse_lb),
+    ets:insert(ibrowse_conf, #ibrowse_conf{key = {trace, Host, Port},
+					   value = Bool}),
+    {noreply, State};
+		     
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -477,183 +605,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-
-handle_send_req({send_req, [Url, _Headers, _Method, _Body, Options, _Timeout]}=Req,
-		From, State) ->
-    case get_host_port(Url, Options) of
-	{Host, Port, _RelPath} ->
-	    Key = maybe_named_key(Host, Port, Options),
-	    case lists:keysearch(Key, #dest.key, State#state.dests) of
-		false ->
-		    {ok, Pid} = spawn_new_connection(Key, false, Options),
-		    Pid ! {Req, From},
-		    Q = queue:new(),
-		    Q_1 = queue:in(Pid, Q),
-		    NewDest = #dest{key=Key,conns=Q_1,num_sessions=1}, %% MISSING is_ssl
-		    State#state{dests=[NewDest|State#state.dests]};
-		{value, #dest{conns=Conns,
-			      num_sessions=NumS,
-			      max_pipeline_size=MaxPSz,
-			      max_sessions=MaxS}=Dest} ->
-		    case get_free_worker(Conns, NumS, MaxS, MaxPSz) of
-			spawn_new_connection ->
-			    do_trace("Spawning new connection~n", []),
-			    {ok, Pid} = spawn_new_connection(Key, Dest#dest.trace, Dest#dest.options),
-			    Pid ! {Req, From},
-			    Q_1 = queue:in(Pid, Conns),
-			    Dest_1 = Dest#dest{conns=Q_1, num_sessions=NumS+1},
-			    State#state{dests=lists:keyreplace(Key, #dest.key, State#state.dests, Dest_1)};
-			not_found ->
-			    do_trace("State -> ~p~nPDict -> ~p~n", [State, get()]),
-			    gen_server:reply(From, {error, retry_later}), 
-			    State;
-			{ok, Pid, _, ConnPids} ->
-			    do_trace("Reusing existing pid: ~p~n", [Pid]),
-			    Pid_key = {Pid, pending_reqs},
-			    put(Pid_key, get(Pid_key) + 1),
-			    Pid ! {Req, From},
-			    State#state{dests=lists:keyreplace(Key, #dest.key, State#state.dests,Dest#dest{conns=ConnPids})}
-		    end
-	    end;
-	invalid_uri ->
-	    gen_server:reply(From, {error, invalid_uri}), 
-	    State
-    end.
-
-get_host_port(Url, Options) ->
-    case get_value(proxy_host, Options, false) of
-	false ->
-	    case parse_url(Url) of
-		#url{host=H, port=P, path=Path} ->
-		    {H, P, Path};
-		_Err ->
-		    invalid_uri
-	    end;
-	PxyHost ->
-	    PxyPort = get_value(proxy_port, Options, 80),
-	    {PxyHost, PxyPort, Url}
-    end.
-
-handle_conn_closing(Pid, #state{dests=Dests}=State) ->
-    erase({Pid, pending_reqs}),
-    HostKey = get({Pid, hostport}),
-    erase({Pid, hostport}),
-    do_trace("~p is shutting down~n", [Pid]),
-    case lists:keysearch(HostKey, #dest.key, Dests) of
-	{value, #dest{num_sessions=Num, conns=Q}=Dest} ->
-	    State#state{dests=lists:keyreplace(HostKey, #dest.key, Dests, 
-					       Dest#dest{conns=del_from_q(Q, Num, Pid), num_sessions=Num-1})};
-	false ->
-	    State
-    end.
-
-%% Replaces destination information if found, otherwise appends it.
-%% Copies over Connection Queue and Number of sessions.
-set_destI(State,Host,Port,Opts) ->
-    #state{dests=DestList} = State,
-    Key = maybe_named_key(Host, Port, Opts),
-    NewDests = case lists:keysearch(Key, #dest.key, DestList) of
-		   false ->
-		       Dest = insert_opts(Opts,#dest{key=Key}),
-		       [Dest | DestList];
-		   {value, OldDest} ->
-		       OldDest_1 = insert_opts(Opts, OldDest),
-		       [OldDest_1 | (DestList -- [OldDest])]
-	       end,
-    State#state{dests=NewDests}.
-
-insert_opts(Opts, Dest) ->
-    insert_opts_1(Opts, Dest#dest{options=Opts}).
-
-insert_opts_1([],Dest) -> Dest;
-insert_opts_1([{max_sessions,Msess}|T],Dest) ->
-    insert_opts_1(T,Dest#dest{max_sessions=Msess});
-insert_opts_1([{max_pipeline_size,Mpls}|T],Dest) ->
-    insert_opts_1(T,Dest#dest{max_pipeline_size=Mpls});
-insert_opts_1([{trace,Bool}|T],Dest) when Bool==true; Bool==false ->
-    insert_opts_1(T,Dest#dest{trace=Bool});
-insert_opts_1([_|T],Dest) -> %% ignores other
-    insert_opts_1(T,Dest).
-
-% Picks out the worker with the minimum pipeline size
-% If a worker is found with a non-zero pipeline size, but the number of sessins
-% is less than the max allowed sessions, a new connection is spawned.
-get_free_worker(Q, NumSessions, MaxSessions, MaxPSz) ->
-    case get_free_worker_1(Q, NumSessions, MaxPSz, {undefined, undefined}) of
-	not_found when NumSessions < MaxSessions ->
-	    spawn_new_connection;
-	not_found ->
-	    not_found;
-	{ok, Pid, PSz, _Q1} when NumSessions < MaxSessions, PSz > 0 ->
-	    do_trace("Found Pid -> ~p. PSz -> ~p~n", [Pid, PSz]),
-	    spawn_new_connection;
-	Ret ->
-	    do_trace("get_free_worker: Ret -> ~p~n", [Ret]),
-	    Ret
-    end.
-
-get_free_worker_1(_, 0, _, {undefined, undefined}) ->
-    not_found;
-get_free_worker_1({{value, WorkerPid}, Q}, 0, _, {MinPSzPid, PSz}) ->
-    {ok, MinPSzPid, PSz, queue:in(WorkerPid, Q)};
-get_free_worker_1({{value, Pid}, Q1}, NumSessions, MaxPSz, {_MinPSzPid, MinPSz}=V) ->
-    do_trace("Pid -> ~p. MaxPSz -> ~p MinPSz -> ~p~n", [Pid, MaxPSz, MinPSz]),
-    case get({Pid, pending_reqs}) of
-	NumP when NumP < MaxPSz, NumP < MinPSz ->
-	    get_free_worker_1(queue:out(queue:in(Pid, Q1)), NumSessions-1, MaxPSz, {Pid, NumP});
-	_ ->
-	    get_free_worker_1(queue:out(queue:in(Pid, Q1)), NumSessions-1, MaxPSz, V)
-    end;
-get_free_worker_1({empty, _Q}, _, _, _) ->
-    do_trace("Queue empty -> not_found~n", []),
-    not_found;
-get_free_worker_1(Q, NumSessions, MaxPSz, MinPSz) ->
-    get_free_worker_1(queue:out(Q), NumSessions, MaxPSz, MinPSz).
-
-spawn_new_connection({_Pool_name, Host, Port}, Trace, Options) ->
-    spawn_new_connection({Host, Port}, Trace, Options);
-spawn_new_connection({Host, Port}, Trace, Options) ->
-    {ok, Pid} = ibrowse_http_client:start_link([Host, Port, Trace, Options]),
-    Key = maybe_named_key(Host, Port, Options),
-    put({Pid, pending_reqs}, 1),
-    put({Pid, hostport}, Key),
-    {ok, Pid}.
-
-del_from_q({empty, Q}, _, _) ->
-    Q;
-del_from_q({{value, V}, Q}, 0, _Elem) ->
-    queue:in(V, Q);
-del_from_q({{value, Elem}, Q1}, QSize, Elem) ->
-    del_from_q(queue:out(Q1), QSize-1, Elem);
-del_from_q({{value, V}, Q}, QSize, Elem) ->
-    del_from_q(queue:out(queue:in(V, Q)), QSize-1, Elem);
-del_from_q(Q, QSize, Elem) ->
-    del_from_q(queue:out(Q), QSize, Elem).
-
-maybe_named_key(Host, Port, Opts) ->
-    case lists:keysearch(name, 1, Opts) of
-	{value, {name, Pool_name}} when is_atom(Pool_name) ->
-	    {Pool_name, Host, Port};
-	_ ->
-	    {Host, Port}
-    end.
-
-% get_value(Tag, TVL) ->
-%     {value, {_, V}} = lists:keysearch(Tag,1,TVL),
-%     V.
-
-get_value(Tag, TVL, DefVal) ->
-    case lists:keysearch(Tag, 1, TVL) of
-	{value, {_, V}} ->
-	    V;
-	false ->
-	    DefVal
-    end.
-
-do_trace(Fmt, Args) ->
-    do_trace(get(my_trace_flag), Fmt, Args).
-% do_trace(true, Fmt, Args) ->
-%     io:format("~s -- IBROWSE - "++Fmt, [printable_date() | Args]);
-do_trace(true, Fmt, Args) ->
-    io:format("~s -- IBROWSE - "++Fmt, [printable_date() | Args]);
-do_trace(_, _, _) -> ok.
+do_get_connection(#url{host = Host, port = Port}, []) ->
+    {ok, Pid} = ibrowse_lb:start_link([Host, Port]),
+    ets:insert(ibrowse_lb, #lb_pid{host_port = {Host, Port}, pid = Pid}),
+    Pid;
+do_get_connection(_Url, [#lb_pid{pid = Pid}]) ->
+    Pid.

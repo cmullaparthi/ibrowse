@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.16 2008/02/27 23:39:23 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.17 2008/03/27 01:35:50 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -15,32 +15,50 @@
 
 %%--------------------------------------------------------------------
 %% External exports
--export([start_link/1]).
+-export([
+	 start_link/1,
+	 start/1,
+	 stop/1,
+	 send_req/7
+	]).
 
 -ifdef(debug).
 -compile(export_all).
 -endif.
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
--export([parse_url/1,
-	 printable_date/0]).
+-export([
+	 init/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3
+	]).
 
 -include("ibrowse.hrl").
 
--record(state, {host, port, use_proxy = false, proxy_auth_digest,
-		ssl_options=[], is_ssl, socket, 
+-record(state, {host, port, 
+		use_proxy = false, proxy_auth_digest,
+		ssl_options = [], is_ssl = false, socket, 
 		reqs=queue:new(), cur_req, status=idle, http_status_code, 
 		reply_buffer=[], rep_buf_size=0, recvd_headers=[],
 		is_closing, send_timer, content_length,
 		deleted_crlf = false, transfer_encoding, chunk_size, 
-		chunks=[]}).
+		chunks=[], lb_ets_tid, cur_pipeline_size = 0}).
 
 -record(request, {url, method, options, from,
 		  stream_to, req_id,
 		  save_response_to_file = false,
 		  tmp_file_name, tmp_file_fd}).
+
+-import(ibrowse_lib, [
+		      parse_url/1,
+		      printable_date/0,
+		      get_value/2,
+		      get_value/3,
+		      do_trace/2
+		     ]).
 
 %%====================================================================
 %% External functions
@@ -49,8 +67,25 @@
 %% Function: start_link/0
 %% Description: Starts the server
 %%--------------------------------------------------------------------
+start(Args) ->
+    gen_server:start(?MODULE, Args, []).
+
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
+
+stop(Conn_pid) ->
+    gen_server:call(Conn_pid, stop).
+
+send_req(Conn_Pid, Url, Headers, Method, Body, Options, Timeout) ->
+    Timeout_1 = case Timeout of
+		    infinity ->
+			infinity;
+		    _ when is_integer(Timeout) ->
+			Timeout + 100
+		end,
+    gen_server:call(
+      Conn_Pid,
+      {send_req, {Url, Headers, Method, Body, Options, Timeout}}, Timeout_1).
 
 %%====================================================================
 %% Server functions
@@ -64,15 +99,20 @@ start_link(Args) ->
 %%          ignore               |
 %%          {stop, Reason}
 %%--------------------------------------------------------------------
-init([Host, Port, Trace, Options]) ->
-    {SSLOptions, IsSSL} = case get_value(is_ssl, Options, false) of
-			      false -> {[], false};
-			      true -> {get_value(ssl_options, Options), true}
-			  end,
-    State = #state{host=Host, port=Port, is_ssl=IsSSL, ssl_options=SSLOptions},
-    put(ibrowse_http_client_host, Host),
-    put(ibrowse_http_client_port, Port),
-    put(my_trace_flag, Trace),
+init({Lb_Tid, #url{host = Host, port = Port}, {SSLOptions, Is_ssl}}) ->
+    State = #state{host = Host,
+		   port = Port,
+		   ssl_options = SSLOptions,
+		   is_ssl = Is_ssl,
+		   lb_ets_tid = Lb_Tid},
+    put(ibrowse_trace_token, [Host, $:, integer_to_list(Port)]),
+    put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
+    {ok, State};
+init({Host, Port}) ->
+    State = #state{host = Host,
+		   port = Port},
+    put(ibrowse_trace_token, [Host, $:, integer_to_list(Port)]),
+    put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -85,48 +125,29 @@ init([Host, Port, Trace, Options]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
-
-%%--------------------------------------------------------------------
-%% Function: handle_cast/2
-%% Description: Handling cast messages
-%% Returns: {noreply, State}          |
-%%          {noreply, State, Timeout} |
-%%          {stop, Reason, State}            (terminate/2 is called)
-%%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% Function: handle_info/2
-%% Description: Handling all non call/cast messages
-%% Returns: {noreply, State}          |
-%%          {noreply, State, Timeout} |
-%%          {stop, Reason, State}            (terminate/2 is called)
-%%--------------------------------------------------------------------
 %% Received a request when the remote server has already sent us a
 %% Connection: Close header
-handle_info({{send_req, Req}, From}, #state{is_closing=true}=State) ->
-    ibrowse ! {conn_closing, self(), {send_req, Req}, From},
-    {noreply, State};
+handle_call({send_req, _}, 
+	    _From,
+	    #state{is_closing=true}=State) ->
+    {reply, {error, connection_closing}, State};
 
-%% First request when no connection exists.
-handle_info({{send_req, [Url, Headers, Method,
-			 Body, Options, Timeout]}, From}, 
+handle_call({send_req, {Url, Headers, Method, Body, Options, Timeout}}, 
+	    From,
 	    #state{socket=undefined,
 		   host=Host, port=Port}=State) ->
-    State_1 = case get_value(proxy_host, Options, false) of
-		  false ->
-		      State;
-		   _PHost ->
-		      ProxyUser = get_value(proxy_user, Options, []),
-		      ProxyPassword = get_value(proxy_password, Options, []),
-		      Digest = http_auth_digest(ProxyUser, ProxyPassword),
-		      State#state{use_proxy = true,
-				  proxy_auth_digest = Digest}
-	      end,
+    {Host_1, Port_1, State_1} =
+	case get_value(proxy_host, Options, false) of
+	    false ->
+		{Host, Port, State};
+	    PHost ->
+		ProxyUser = get_value(proxy_user, Options, []),
+		ProxyPassword = get_value(proxy_password, Options, []),
+		Digest = http_auth_digest(ProxyUser, ProxyPassword),
+		{PHost, get_value(proxy_port, Options, 80),
+		 State#state{use_proxy = true,
+			     proxy_auth_digest = Digest}}
+	end,
     StreamTo = get_value(stream_to, Options, undefined),
     ReqId = make_req_id(),
     SaveResponseToFile = get_value(save_response_to_file, Options, false),
@@ -146,7 +167,7 @@ handle_info({{send_req, [Url, Headers, Method,
 		    _ ->
 			round(Timeout*0.9)
 		end,
-    case do_connect(Host, Port, Options, State_2, Timeout_1) of
+    case do_connect(Host_1, Port_1, Options, State_2, Timeout_1) of
 	{ok, Sock} ->
 	    Ref = case Timeout of
 		      infinity ->
@@ -163,26 +184,28 @@ handle_info({{send_req, [Url, Headers, Method,
 			_ ->
 			    gen_server:reply(From, {ibrowse_req_id, ReqId})
 		    end,
-		    {noreply, State_2#state{socket=Sock,
-					    send_timer = Ref,
-					    cur_req = NewReq,
-					    status=get_header}};
+		    State_3 = inc_pipeline_counter(State_2#state{socket = Sock,
+								 send_timer = Ref,
+								 cur_req = NewReq,
+								 status = get_header}),
+		    {noreply, State_3};
 		Err ->
+		    shutting_down(State_2),
 		    do_trace("Send failed... Reason: ~p~n", [Err]),
-		    ibrowse:shutting_down(),
-		    ibrowse:reply(From, {error, send_failed}),
+		    gen_server:reply(From, {error, send_failed}),
 		    {stop, normal, State_2}
 	    end;
 	Err ->
+	    shutting_down(State_2),
 	    do_trace("Error connecting. Reason: ~1000.p~n", [Err]),
-	    ibrowse:shutting_down(),
-	    ibrowse:reply(From, {error, conn_failed}),
+	    gen_server:reply(From, {error, conn_failed}),
 	    {stop, normal, State_2}
     end;
 
 %% Request which is to be pipelined
-handle_info({{send_req, [Url, Headers, Method,
-			 Body, Options, Timeout]}, From}, 
+handle_call({send_req, {Url, Headers, Method,
+			 Body, Options, Timeout}},
+	    From,
 	    #state{socket=Sock, status=Status, reqs=Reqs}=State) ->
     do_trace("Recvd request in connected state. Status -> ~p NumPending: ~p~n", [Status, length(queue:to_list(Reqs))]),
     StreamTo = get_value(stream_to, Options, undefined),
@@ -198,6 +221,7 @@ handle_info({{send_req, [Url, Headers, Method,
     State_1 = State#state{reqs=queue:in(NewReq, State#state.reqs)},
     case send_req_1(Url, Headers, Method, Body, Options, Sock, State_1) of
 	ok ->
+	    State_2 = inc_pipeline_counter(State_1),
 	    do_setopts(Sock, [{active, true}], State#state.is_ssl),
 	    case Timeout of
 		infinity ->
@@ -205,31 +229,54 @@ handle_info({{send_req, [Url, Headers, Method,
 		_ ->
 		    erlang:send_after(Timeout, self(), {req_timedout, From})
 	    end,
-	    State_2 = case Status of
+	    State_3 = case Status of
 			  idle ->
-			      State_1#state{status = get_header,
+			      State_2#state{status = get_header,
 					    cur_req = NewReq};
 			  _ ->
-			      State_1
+			      State_2
 		      end,
 	    case StreamTo of
 		undefined ->
 		    ok;
 		_ ->
-		    %% We don't use ibrowse:reply here because we are
-		    %% just sending back the request ID. Not the
-		    %% response
 		    gen_server:reply(From, {ibrowse_req_id, ReqId})
 	    end,
-	    {noreply, State_2};
+	    {noreply, State_3};
 	Err ->
+	    shutting_down(State_1),
 	    do_trace("Send request failed: Reason: ~p~n", [Err]),
-	    ibrowse:reply(From, {error, send_failed}),
+	    gen_server:reply(From, {error, send_failed}),
 	    do_error_reply(State, send_failed),
-	    ibrowse:shutting_down(),
 	    {stop, normal, State_1}
     end;
 
+handle_call(stop, _From, #state{socket = Socket, is_ssl = Is_ssl} = State) ->
+    do_close(Socket, Is_ssl),
+    do_error_reply(State, closing_on_request),
+    {stop, normal, State};
+
+handle_call(Request, _From, State) ->
+    Reply = {unknown_request, Request},
+    {reply, Reply, State}.
+
+%%--------------------------------------------------------------------
+%% Function: handle_cast/2
+%% Description: Handling cast messages
+%% Returns: {noreply, State}          |
+%%          {noreply, State, Timeout} |
+%%          {stop, Reason, State}            (terminate/2 is called)
+%%--------------------------------------------------------------------
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% Function: handle_info/2
+%% Description: Handling all non call/cast messages
+%% Returns: {noreply, State}          |
+%%          {noreply, State, Timeout} |
+%%          {stop, Reason, State}            (terminate/2 is called)
+%%--------------------------------------------------------------------
 handle_info({tcp, _Sock, Data}, State) ->
     handle_sock_data(Data, State);
 handle_info({ssl, _Sock, Data}, State) ->
@@ -249,13 +296,12 @@ handle_info({req_timedout, From}, State) ->
        false ->
           {noreply, State};
        {value, _} ->
-          ibrowse:shutting_down(),
+          shutting_down(State),
           do_error_reply(State, req_timedout),
           {stop, normal, State}
     end;
 
 handle_info({trace, Bool}, State) ->
-    do_trace("Turning trace on: Host: ~p Port: ~p~n", [State#state.host, State#state.port]),
     put(my_trace_flag, Bool),
     {noreply, State};
 
@@ -293,7 +339,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 handle_sock_data(Data, #state{status=idle}=State) ->
     do_trace("Data recvd on socket in state idle!. ~1000.p~n", [Data]),
-    ibrowse:shutting_down(),
+    shutting_down(State),
     do_error_reply(State, data_in_status_idle),
     do_close(State#state.socket, State#state.is_ssl),
     {stop, normal, State};
@@ -301,10 +347,10 @@ handle_sock_data(Data, #state{status=idle}=State) ->
 handle_sock_data(Data, #state{status=get_header, socket=Sock}=State) ->
     case parse_response(Data, State) of
 	{error, _Reason} ->
-	    ibrowse:shutting_down(),
+	    shutting_down(State),
 	    {stop, normal, State};
 	stop ->
-	    ibrowse:shutting_down(),
+	    shutting_down(State),
 	    {stop, normal, State};
 	State_1 ->
 	    do_setopts(Sock, [{active, true}], State#state.is_ssl),
@@ -319,7 +365,7 @@ handle_sock_data(Data, #state{status=get_body, content_length=CL,
 	true ->
 	    case accumulate_response(Data, State) of
 		{error, Reason} ->
-		    ibrowse:shutting_down(),
+		    shutting_down(State),
 		    fail_pipelined_requests(State, 
 					    {error, {Reason, {stat_code, StatCode}, Headers}}),
 		    {stop, normal, State};
@@ -330,12 +376,12 @@ handle_sock_data(Data, #state{status=get_body, content_length=CL,
 	_ ->
 	    case parse_11_response(Data, State) of
 		{error, Reason} ->
-		    ibrowse:shutting_down(),
+		    shutting_down(State),
 		    fail_pipelined_requests(State, 
 					    {error, {Reason, {stat_code, StatCode}, Headers}}),
 		    {stop, normal, State};
 		stop ->
-		    ibrowse:shutting_down(),
+		    shutting_down(State),
 		    {stop, normal, State};
 		State_1 ->
 		    do_setopts(Sock, [{active, true}], State#state.is_ssl),
@@ -398,7 +444,7 @@ accumulate_response(Data, #state{reply_buffer = RepBuf,
     end.
 
 make_tmp_filename() ->
-    DownloadDir = safe_get_env(ibrowse, download_dir, filename:absname("./")),
+    DownloadDir = ibrowse:get_config_value(download_dir, filename:absname("./")),
     {A,B,C} = now(),
     filename:join([DownloadDir,
 		   "ibrowse_tmp_file_"++
@@ -411,11 +457,11 @@ make_tmp_filename() ->
 %% Handles the case when the server closes the socket
 %%--------------------------------------------------------------------
 handle_sock_closed(#state{status=get_header}=State) ->
-    ibrowse:shutting_down(),
+    shutting_down(State),
     do_error_reply(State, connection_closed);
 
-handle_sock_closed(#state{cur_req=undefined}) ->
-    ibrowse:shutting_down();
+handle_sock_closed(#state{cur_req=undefined} = State) ->
+    shutting_down(State);
 
 %% We check for IsClosing because this the server could have sent a 
 %% Connection-Close header and has closed the socket to indicate end
@@ -431,26 +477,54 @@ handle_sock_closed(#state{reply_buffer=Buf, reqs=Reqs, http_status_code=SC,
 	    {_, Reqs_1} = queue:out(Reqs),
 	    case TmpFilename of
 		undefined ->
-		    do_reply(From, StreamTo, ReqId,
+		    do_reply(State, From, StreamTo, ReqId,
 			     {ok, SC, Headers,
 			      lists:flatten(lists:reverse(Buf))});
 		_ ->
 		    file:close(Fd),
-		    do_reply(From, StreamTo, ReqId,
+		    do_reply(State, From, StreamTo, ReqId,
 			     {ok, SC, Headers, {file, TmpFilename}})
 	    end,
-	    do_error_reply(State#state{reqs = Reqs_1}, connection_closed);
+	    do_error_reply(State#state{reqs = Reqs_1}, connection_closed),
+	    State;
 	_ ->
-	    do_error_reply(State, connection_closed)
+	    do_error_reply(State, connection_closed),
+	    State
     end.
 
 do_connect(Host, Port, _Options, #state{is_ssl=true, ssl_options=SSLOptions}, Timeout) ->
-    ssl:connect(Host, Port, [{active, false} | SSLOptions], Timeout);
+    ssl:connect(Host, Port, [{nodelay, true}, {active, false} | SSLOptions], Timeout);
 do_connect(Host, Port, _Options, _State, Timeout) ->
-    gen_tcp:connect(Host, Port, [{active, false}], Timeout).
+    gen_tcp:connect(Host, Port, [{nodelay, true}, {active, false}], Timeout).
 
 do_send(Sock, Req, true)  ->  ssl:send(Sock, Req);
 do_send(Sock, Req, false) ->  gen_tcp:send(Sock, Req).
+
+%% @spec do_send_body(Sock::socket_descriptor(), Source::source_descriptor(), IsSSL::boolean()) -> ok | error()
+%% source_descriptor() = fun_arity_0           |
+%%                       {fun_arity_0}         |
+%%                       {fun_arity_1, term()}
+%% error() = term()
+do_send_body(Sock, Source, IsSSL) when is_function(Source) ->
+    do_send_body(Sock, {Source}, IsSSL);
+do_send_body(Sock, {Source}, IsSSL) when is_function(Source) ->
+    do_send_body1(Sock, Source, IsSSL, Source());
+do_send_body(Sock, {Source, State}, IsSSL) when is_function(Source) ->
+    do_send_body1(Sock, Source, IsSSL, Source(State));
+do_send_body(Sock, Body, IsSSL) ->
+    do_send(Sock, Body, IsSSL).
+
+do_send_body1(Sock, Source, IsSSL, Resp) ->
+    case Resp of
+	{ok, Data} ->
+	    do_send(Sock, Data, IsSSL),
+	    do_send_body(Sock, {Source}, IsSSL);
+	{ok, Data, NewState} ->
+	    do_send(Sock, Data, IsSSL),
+	    do_send_body(Sock, {Source, NewState}, IsSSL);
+	eof -> ok;
+	Err -> Err
+    end.
 
 do_close(Sock, true)  ->  ssl:close(Sock);
 do_close(Sock, false) ->  gen_tcp:close(Sock).
@@ -466,12 +540,12 @@ check_ssl_options(Options, State) ->
 	    State#state{is_ssl=true, ssl_options=get_value(ssl_options, Options)}
     end.
 
-send_req_1(Url, Headers, Method, Body, Options, Sock, State) ->
-    #url{abspath = AbsPath,
-	 host = Host,
-	 port = Port, 
-	 path = RelPath} = Url_1 = parse_url(Url),
-    Headers_1 = add_auth_headers(Url_1, Options, Headers, State),
+send_req_1(#url{abspath = AbsPath,
+		host = Host,
+		port = Port, 
+		path = RelPath} = Url,
+	   Headers, Method, Body, Options, Sock, State) ->
+    Headers_1 = add_auth_headers(Url, Options, Headers, State),
     HostHeaderValue = case lists:keysearch(host_header, 1, Options) of
 			  false ->
 			      case Port of
@@ -481,18 +555,24 @@ send_req_1(Url, Headers, Method, Body, Options, Sock, State) ->
 			  {value, {_, Host_h_val}} ->
 			      Host_h_val
 		      end,
-    Req = make_request(Method, 
-		       [{"Host", HostHeaderValue} | Headers_1],
-		       AbsPath, RelPath, Body, Options, State#state.use_proxy),
-    case get(my_trace_flag) of %%Avoid the binary operations if trace is not on...
+    {Req, Body_1} = make_request(Method, 
+				 [{"Host", HostHeaderValue} | Headers_1],
+				 AbsPath, RelPath, Body, Options, State#state.use_proxy),
+    case get(my_trace_flag) of 
 	true ->
+	    %%Avoid the binary operations if trace is not on...
 	    NReq = binary_to_list(list_to_binary(Req)),
 	    do_trace("Sending request: ~n"
 		     "--- Request Begin ---~n~s~n"
 		     "--- Request End ---~n", [NReq]);
 	_ -> ok
     end,
-    SndRes = do_send(Sock, Req, State#state.is_ssl),
+    SndRes = case do_send(Sock, Req, State#state.is_ssl) of
+		 ok -> do_send_body(Sock, Body_1, State#state.is_ssl);
+		 Err -> 
+		     io:format("Err: ~p~n", [Err]),
+		     Err
+	     end,
     do_setopts(Sock, [{active, true}], State#state.is_ssl),
     SndRes.
 
@@ -549,16 +629,20 @@ e(X)                     -> exit({bad_encode_base64_token, X}).
 
 make_request(Method, Headers, AbsPath, RelPath, Body, Options, UseProxy) ->
     HttpVsn = http_vsn_string(get_value(http_vsn, Options, {1,1})),
-    Headers_1 = case get_value(content_length, Headers, false) of
-		    false when (Body == []) or (Body == <<>>) ->
-			Headers;
-		    false when is_binary(Body) ->
-			[{"content-length", integer_to_list(size(Body))} | Headers];
-		    false ->
-			[{"content-length", integer_to_list(length(Body))} | Headers];
-		    true ->
-			Headers
-		end,
+    Headers_1 =
+	case get_value(content_length, Headers, false) of
+	    false when (Body == []) or
+	               (Body == <<>>) or
+	               is_tuple(Body) or
+	               is_function(Body) ->
+		Headers;
+	    false when is_binary(Body) ->
+		[{"content-length", integer_to_list(size(Body))} | Headers];
+	    false ->
+		[{"content-length", integer_to_list(length(Body))} | Headers];
+	    _ ->
+		Headers
+	end,
     {Headers_2, Body_1} = 
 	case get_value(transfer_encoding, Options, false) of
 	    false ->
@@ -578,7 +662,7 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options, UseProxy) ->
 	      false -> 
 		  RelPath
 	  end,
-    [method(Method), " ", Uri, " ", HttpVsn, crnl(), Headers_3, crnl(), Body_1].
+    {[method(Method), " ", Uri, " ", HttpVsn, crnl(), Headers_3, crnl()], Body_1}.
 
 http_vsn_string({0,9}) -> "HTTP/0.9";
 http_vsn_string({1,0}) -> "HTTP/1.0";
@@ -649,7 +733,7 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 			    cur_req=CurReq}=State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
 	     method=Method} = CurReq,
-    MaxHeaderSize = safe_get_env(ibrowse, max_headers_size, infinity),
+    MaxHeaderSize = ibrowse:get_config_value(max_headers_size, infinity),
     case scan_header(Data, Acc) of
 	{yes, Headers, Data_1}  ->
 	    do_trace("Recvd Header Data -> ~s~n----~n", [Headers]),
@@ -661,7 +745,7 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 	    IsClosing = is_connection_closing(HttpVsn, ConnClose),
 	    case IsClosing of
 		true ->
-                    ibrowse:shutting_down();
+                    shutting_down(State);
 		false ->
 		    ok
 	    end,
@@ -673,9 +757,9 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		_ when Method == head ->
 		    {_, Reqs_1} = queue:out(Reqs),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
-		    do_reply(From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
-		    cancel_timer(State#state.send_timer, {eat_message, {req_timedout, From}}),
-		    State_2 = reset_state(State_1),
+		    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
+		    cancel_timer(State_1_1#state.send_timer, {eat_message, {req_timedout, From}}),
+		    State_2 = reset_state(State_1_1),
 		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
 		    parse_response(Data_1, State_3);
 		_ when hd(StatCode) == $1 ->
@@ -692,9 +776,9 @@ parse_response(Data, #state{reply_buffer=Acc, reqs=Reqs,
 		    %% RFC2616 - Sec 4.4
 		    {_, Reqs_1} = queue:out(Reqs),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
-		    do_reply(From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
-		    cancel_timer(State#state.send_timer, {eat_message, {req_timedout, From}}),
-		    State_2 = reset_state(State_1),
+		    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, {ok, StatCode, Headers_1, []}),
+		    cancel_timer(State_1_1#state.send_timer, {eat_message, {req_timedout, From}}),
+		    State_2 = reset_state(State_1_1),
 		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
 		    parse_response(Data_1, State_3);
 		_ when TransferEncoding == "chunked" ->
@@ -914,9 +998,9 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
 		       _ ->
 			   {file, TmpFilename}
 		   end,
-    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, ResponseBody}),
+    State_2 = do_reply(State_1, From, StreamTo, ReqId, {ok, SCode, RespHeaders, ResponseBody}),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
-    State_1;
+    State_2;
 handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
 		#state{http_status_code=SCode, recvd_headers=RespHeaders,
 		       reply_buffer=RepBuf, transfer_encoding=TEnc,
@@ -930,12 +1014,12 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId},
     State_1 = set_cur_request(State),
     case get(conn_close) of
 	"close" ->
-	    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, Body}),
+	    do_reply(State_1, From, StreamTo, ReqId, {ok, SCode, RespHeaders, Body}),
 	    exit(normal);
 	_ ->
-	    do_reply(From, StreamTo, ReqId, {ok, SCode, RespHeaders, Body}),
+	    State_2 = do_reply(State_1, From, StreamTo, ReqId, {ok, SCode, RespHeaders, Body}),
 	    cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
-	    State_1
+	    State_2
     end.
 
 reset_state(State) ->
@@ -1108,134 +1192,38 @@ is_whitespace($\t) -> true;
 is_whitespace(_)   -> false.
 
 
-parse_url(Url) ->
-    parse_url(Url, get_protocol, #url{abspath=Url}, []).
-
-parse_url([$:, $/, $/ | _], get_protocol, Url, []) ->
-    {invalid_uri_1, Url};
-parse_url([$:, $/, $/ | T], get_protocol, Url, TmpAcc) ->
-    Prot = list_to_atom(lists:reverse(TmpAcc)),
-    parse_url(T, get_username, 
-	      Url#url{protocol = Prot},
-	      []);
-parse_url([$/ | T], get_username, Url, TmpAcc) ->
-    %% No username/password. No  port number
-    Url#url{host = lists:reverse(TmpAcc),
-	    port = default_port(Url#url.protocol),
-	    path = [$/ | T]};
-parse_url([$: | T], get_username, Url, TmpAcc) ->
-    %% It is possible that no username/password has been
-    %% specified. But we'll continue with the assumption that there is
-    %% a username/password. If we encounter a '@' later on, there is a
-    %% username/password indeed. If we encounter a '/', it was
-    %% actually the hostname
-    parse_url(T, get_password, 
-	      Url#url{username = lists:reverse(TmpAcc)},
-	      []);
-parse_url([$@ | T], get_username, Url, TmpAcc) ->
-    parse_url(T, get_host, 
-	      Url#url{username = lists:reverse(TmpAcc),
-		      password = ""},
-	      []);
-parse_url([$@ | T], get_password, Url, TmpAcc) ->
-    parse_url(T, get_host, 
-	      Url#url{password = lists:reverse(TmpAcc)},
-	      []);
-parse_url([$/ | T], get_password, Url, TmpAcc) ->
-    %% Ok, what we thought was the username/password was the hostname
-    %% and portnumber
-    #url{username=User} = Url,
-    Port = list_to_integer(lists:reverse(TmpAcc)),
-    Url#url{host = User,
-	    port = Port,
-	    username = undefined,
-	    password = undefined,
-	    path = [$/ | T]};
-parse_url([$: | T], get_host, #url{} = Url, TmpAcc) ->
-    parse_url(T, get_port, 
-	      Url#url{host = lists:reverse(TmpAcc)},
-	      []);
-parse_url([$/ | T], get_host, #url{protocol=Prot} = Url, TmpAcc) ->
-    Url#url{host = lists:reverse(TmpAcc),
-	    port = default_port(Prot),
-	    path = [$/ | T]};
-parse_url([$/ | T], get_port, #url{protocol=Prot} = Url, TmpAcc) ->
-    Port = case TmpAcc of
-	       [] ->
-		   default_port(Prot);
-	       _ ->
-		   list_to_integer(lists:reverse(TmpAcc))
-	   end,
-    Url#url{port = Port, path = [$/ | T]};
-parse_url([H | T], State, Url, TmpAcc) ->
-    parse_url(T, State, Url, [H | TmpAcc]);
-parse_url([], get_host, Url, TmpAcc) when TmpAcc /= [] ->
-    Url#url{host = lists:reverse(TmpAcc),
-	    port = default_port(Url#url.protocol),
-	    path = "/"};
-parse_url([], get_username, Url, TmpAcc) when TmpAcc /= [] ->
-    Url#url{host = lists:reverse(TmpAcc),
-	    port = default_port(Url#url.protocol),
-	    path = "/"};
-parse_url([], get_port, #url{protocol=Prot} = Url, TmpAcc) ->
-    Port = case TmpAcc of
-	       [] ->
-		   default_port(Prot);
-	       _ ->
-		   list_to_integer(lists:reverse(TmpAcc))
-	   end,
-    Url#url{port = Port, 
-	    path = "/"};
-parse_url([], get_password, Url, TmpAcc) ->
-    %% Ok, what we thought was the username/password was the hostname
-    %% and portnumber
-    #url{username=User} = Url,
-    Port = case TmpAcc of
-	       [] ->
-		   default_port(Url#url.protocol);
-	       _ ->
-		   list_to_integer(lists:reverse(TmpAcc))
-	   end,
-    Url#url{host = User,
-	    port = Port,
-	    username = undefined,
-	    password = undefined,
-	    path = "/"};
-parse_url([], State, Url, TmpAcc) ->
-    {invalid_uri_2, State, Url, TmpAcc}.
-
-default_port(http)  -> 80;
-default_port(https) -> 443;
-default_port(ftp)   -> 21.
-
 send_async_headers(_ReqId, undefined, _StatCode, _Headers) ->
     ok;
 send_async_headers(ReqId, StreamTo, StatCode, Headers) ->
     catch StreamTo ! {ibrowse_async_headers, ReqId, StatCode, Headers}.
 
-do_reply(From, undefined, _, Msg) ->
-    ibrowse:reply(From, Msg);
-do_reply(_From, StreamTo, ReqId, {ok, _, _, _}) ->
-    ibrowse:finished_async_request(),
-    catch StreamTo ! {ibrowse_async_response_end, ReqId};
-do_reply(_From, StreamTo, ReqId, Msg) ->
-    catch StreamTo ! {ibrowse_async_response, ReqId, Msg}.
+do_reply(State, From, undefined, _, Msg) ->
+    gen_server:reply(From, Msg),
+    dec_pipeline_counter(State);
+do_reply(State, _From, StreamTo, ReqId, {ok, _, _, _}) ->
+    State_1 = dec_pipeline_counter(State),
+    catch StreamTo ! {ibrowse_async_response_end, ReqId},
+    State_1;
+do_reply(State, _From, StreamTo, ReqId, Msg) ->
+    State_1 = dec_pipeline_counter(State),
+    catch StreamTo ! {ibrowse_async_response, ReqId, Msg},
+    State_1.
 
 do_interim_reply(undefined, _ReqId, _Msg) ->
     ok;
 do_interim_reply(StreamTo, ReqId, Msg) ->
     catch StreamTo ! {ibrowse_async_response, ReqId, Msg}.
 
-do_error_reply(#state{reqs = Reqs}, Err) ->
+do_error_reply(#state{reqs = Reqs} = State, Err) ->
     ReqList = queue:to_list(Reqs),
     lists:foreach(fun(#request{from=From, stream_to=StreamTo, req_id=ReqId}) ->
-                          do_reply(From, StreamTo, ReqId, {error, Err})
+                          do_reply(State, From, StreamTo, ReqId, {error, Err})
 		  end, ReqList).
 
 fail_pipelined_requests(#state{reqs = Reqs, cur_req = CurReq} = State, Reply) ->
     {_, Reqs_1} = queue:out(Reqs),
     #request{from=From, stream_to=StreamTo, req_id=ReqId} = CurReq,
-    do_reply(From, StreamTo, ReqId, Reply),
+    do_reply(State, From, StreamTo, ReqId, Reply),
     do_error_reply(State#state{reqs = Reqs_1}, previous_request_failed).
 
 
@@ -1247,18 +1235,6 @@ split_list_at(List2, 0, List1) ->
     {lists:reverse(List1), List2};
 split_list_at([H | List2], N, List1) ->
     split_list_at(List2, N-1, [H | List1]).
-
-get_value(Tag, TVL) ->
-    {value, {_, V}} = lists:keysearch(Tag,1,TVL),
-    V.
-
-get_value(Tag, TVL, DefVal) ->
-    case lists:keysearch(Tag, 1, TVL) of
-	{value, {_, V}} ->
-	    V;
-	false ->
-	    DefVal
-    end.
 
 hexlist_to_integer(List) ->
     hexlist_to_integer(lists:reverse(List), 1, 0).
@@ -1290,14 +1266,6 @@ to_ascii($8) -> 8;
 to_ascii($9) -> 9;
 to_ascii($0) -> 0.
 
-safe_get_env(App, EnvVar, DefaultValue) ->
-    case application:get_env(App,EnvVar) of
-	undefined ->
-	    DefaultValue;
-	{ok, V} ->
-	    V
-    end.
-
 cancel_timer(undefined) -> ok;
 cancel_timer(Ref)       -> erlang:cancel_timer(Ref).
 
@@ -1313,38 +1281,6 @@ cancel_timer(Ref, {eat_message, Msg}) ->
 make_req_id() ->
     now().
 
-do_trace(Fmt, Args) ->
-    do_trace(get(my_trace_flag), Fmt, Args).
-
-% Useful for debugging
-% do_trace(_, Fmt, Args) ->
-%     io:format("~s -- CLI(~p,~p) - "++Fmt, [printable_date(), 
-% 					   get(ibrowse_http_client_host), 
-% 					   get(ibrowse_http_client_port) | Args]);
-do_trace(true, Fmt, Args) ->
-    io:format("~s -- CLI(~p,~p) - "++Fmt,
-	      [printable_date(), 
-	       get(ibrowse_http_client_host), 
-	       get(ibrowse_http_client_port) | Args]);
-do_trace(_, _, _) -> ok.
-
-printable_date() ->
-    {{Y,Mo,D},{H, M, S}} = calendar:local_time(),
-    {_,_,MicroSecs} = now(),
-    [integer_to_list(Y),
-     $-,
-     integer_to_list(Mo),
-     $-,
-     integer_to_list(D),
-     $_,
-     integer_to_list(H),
-     $:,
-     integer_to_list(M),
-     $:,
-     integer_to_list(S),
-     $:,
-     integer_to_list(MicroSecs div 1000)].
-
 to_lower(Str) ->
     to_lower(Str, []).
 to_lower([H|T], Acc) when H >= $A, H =< $Z ->
@@ -1354,3 +1290,23 @@ to_lower([H|T], Acc) ->
 to_lower([], Acc) ->
     lists:reverse(Acc).
 
+shutting_down(#state{lb_ets_tid = undefined}) ->
+    ok;
+shutting_down(#state{lb_ets_tid = Tid,
+		     cur_pipeline_size = Sz}) ->
+    ets:delete(Tid, {Sz, self()}).
+
+inc_pipeline_counter(#state{is_closing = true} = State) ->
+    State;
+inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz} = State) ->
+    State#state{cur_pipeline_size = Pipe_sz + 1}.
+
+dec_pipeline_counter(#state{is_closing = true} = State) ->
+    State;
+dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
+    State;
+dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
+			    lb_ets_tid = Tid} = State) ->
+    ets:delete(Tid, {Pipe_sz, self()}),
+    ets:insert(Tid, {{Pipe_sz - 1, self()}, []}),
+    State#state{cur_pipeline_size = Pipe_sz - 1}.
