@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_http_client).
--vsn('$Id: ibrowse_http_client.erl,v 1.17 2008/03/27 01:35:50 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_http_client.erl,v 1.18 2008/05/21 15:28:11 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -1294,7 +1294,7 @@ shutting_down(#state{lb_ets_tid = undefined}) ->
     ok;
 shutting_down(#state{lb_ets_tid = Tid,
 		     cur_pipeline_size = Sz}) ->
-    ets:delete(Tid, {Sz, self()}).
+    catch ets:delete(Tid, {Sz, self()}).
 
 inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;

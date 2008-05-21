@@ -4,7 +4,7 @@
 %%% Created : 14 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 
 -module(ibrowse_test).
--vsn('$Id: ibrowse_test.erl,v 1.2 2008/03/27 01:35:50 chandrusf Exp $ ').
+-vsn('$Id: ibrowse_test.erl,v 1.3 2008/05/21 15:28:11 chandrusf Exp $ ').
 -export([
 	 load_test/3,
 	 send_reqs_1/3,
@@ -32,6 +32,7 @@ send_reqs_1(Url, NumWorkers, NumReqsPerWorker) ->
     Start_time = now(),
     ets:new(pid_table, [named_table, public]),
     ets:new(ibrowse_test_results, [named_table, public]),
+    ets:new(ibrowse_errors, [named_table, public, ordered_set]),
     init_results(),
     process_flag(trap_exit, true),
     log_msg("Starting spawning of workers...~n", []),
@@ -45,15 +46,20 @@ send_reqs_1(Url, NumWorkers, NumReqsPerWorker) ->
     log_msg("End time  : ~1000.p~n", [calendar:now_to_local_time(End_time)]),
     Elapsed_time_secs = trunc(timer:now_diff(End_time, Start_time) / 1000000),
     log_msg("Elapsed   : ~p~n", [Elapsed_time_secs]),
-    log_msg("Reqs/sec  : ~p~n", [(NumWorkers*NumReqsPerWorker) / Elapsed_time_secs]).
+    log_msg("Reqs/sec  : ~p~n", [(NumWorkers*NumReqsPerWorker) / Elapsed_time_secs]),
+    dump_errors().
 
 init_results() ->
     ets:insert(ibrowse_test_results, {crash, 0}),
     ets:insert(ibrowse_test_results, {send_failed, 0}),
     ets:insert(ibrowse_test_results, {other_error, 0}),
     ets:insert(ibrowse_test_results, {success, 0}),
+    ets:insert(ibrowse_test_results, {retry_later, 0}),
+    ets:insert(ibrowse_test_results, {trid_mismatch, 0}),
+    ets:insert(ibrowse_test_results, {success_no_trid, 0}),
     ets:insert(ibrowse_test_results, {failed, 0}),
-    ets:insert(ibrowse_test_results, {timeout, 0}).
+    ets:insert(ibrowse_test_results, {timeout, 0}),
+    ets:insert(ibrowse_test_results, {req_id, 0}).
 
 spawn_workers(_Url, 0, _) ->
     ok;
@@ -89,18 +95,53 @@ do_send_req(Url, NumReqs) ->
 do_send_req_1(_Url, 0) ->
     ets:delete(pid_table, self());
 do_send_req_1(Url, NumReqs) ->
-    case ibrowse:send_req(Url, [], get, [], [], 10000) of
-	{ok, _Status, _Headers, _Body} ->
-	    ets:update_counter(ibrowse_test_results, success, 1);
+    Counter = integer_to_list(ets:update_counter(ibrowse_test_results, req_id, 1)),
+    case ibrowse:send_req(Url, [{"ib_req_id", Counter}], get, [], [], 10000) of
+	{ok, _Status, Headers, _Body} ->
+	    case lists:keysearch("ib_req_id", 1, Headers) of
+		{value, {_, Counter}} ->
+		    ets:update_counter(ibrowse_test_results, success, 1);
+		{value, _} ->
+		    ets:update_counter(ibrowse_test_results, trid_mismatch, 1);
+		false ->
+		    ets:update_counter(ibrowse_test_results, success_no_trid, 1)
+	    end;
 	{error, req_timedout} ->
 	    ets:update_counter(ibrowse_test_results, timeout, 1);
 	{error, send_failed} ->
 	    ets:update_counter(ibrowse_test_results, send_failed, 1);
-	_Err ->
+	{error, retry_later} ->
+	    ets:update_counter(ibrowse_test_results, retry_later, 1);
+	Err ->
+	    ets:insert(ibrowse_errors, {now(), Err}),
 	    ets:update_counter(ibrowse_test_results, other_error, 1),
 	    ok
     end,
     do_send_req_1(Url, NumReqs-1).
+
+dump_errors() ->
+    case ets:info(ibrowse_errors, size) of
+	0 ->
+	    ok;
+	_ ->
+	    {A, B, C} = now(),
+	    Filename = lists:flatten(
+			 io_lib:format("ibrowse_errors_~p_~p_~p.txt" , [A, B, C])),
+	    case file:open(Filename, [write, delayed_write, raw]) of
+		{ok, Iod} ->
+		    dump_errors(ets:first(ibrowse_errors), Iod);
+		Err ->
+		    io:format("failed to create file ~s. Reason: ~p~n", [Filename, Err]),
+		    ok
+	    end
+    end.
+
+dump_errors('$end_of_table', Iod) ->
+    file:close(Iod);
+dump_errors(Key, Iod) ->
+    [{_, Term}] = ets:lookup(ibrowse_errors, Key),
+    file:write(Iod, io_lib:format("~p~n", [Term])),
+    dump_errors(ets:next(ibrowse_errors, Key), Iod).
 
 %%------------------------------------------------------------------------------
 %% Unit Tests

@@ -1,4 +1,4 @@
-$Id: README,v 1.15 2008/03/27 01:35:49 chandrusf Exp $
+$Id: README,v 1.16 2008/05/21 15:28:11 chandrusf Exp $
 
 ibrowse is a HTTP client. The following are a list of features.
 	- RFC2616 compliant (AFAIK) 
@@ -22,6 +22,10 @@ Comments to : Chandrashekhar.Mullaparthi@t-mobile.co.uk
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+21-05-2008 - * Fixed bug in reading some options from the ibrowse.conf file.
+               Reported by Erik Reitsma on the erlyaws mailing list
+             * Fixed bug when cleaning up closing connections
+
 27-03-2008 - * Major rewrite of the load balancing feature. Additional module,
                ibrowse_lb.erl, introduced to achieve this.
              * Can now get a handle to a connection process which is not part of

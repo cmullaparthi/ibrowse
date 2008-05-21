@@ -57,7 +57,7 @@
 %% driver isn't actually used.</p>
 
 -module(ibrowse).
--vsn('$Id: ibrowse.erl,v 1.6 2008/03/27 01:35:50 chandrusf Exp $ ').
+-vsn('$Id: ibrowse.erl,v 1.7 2008/05/21 15:28:11 chandrusf Exp $ ').
 
 -behaviour(gen_server).
 %%--------------------------------------------------------------------
@@ -239,10 +239,11 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
 		     end,
 	    Max_sessions = get_max_sessions(Host, Port, Options),
 	    Max_pipeline_size = get_max_pipeline_size(Host, Port, Options),
+	    Options_1 = merge_options(Host, Port, Options),
 	    {SSLOptions, IsSSL} =
-		case get_value(is_ssl, Options, false) of
+		case get_value(is_ssl, Options_1, false) of
 		    false -> {[], false};
-		    true -> {get_value(ssl_options, Options), true}
+		    true -> {get_value(ssl_options, Options_1), true}
 		end,
 	    case ibrowse_lb:spawn_connection(Lb_pid, Parsed_url,
 					     Max_sessions, 
@@ -250,13 +251,25 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
 					     {SSLOptions, IsSSL}) of
 		{ok, Conn_Pid} ->
 		    do_send_req(Conn_Pid, Parsed_url, Headers,
-				Method, Body, Options, Timeout);
+				Method, Body, Options_1, Timeout);
 		Err ->
 		    Err
 	    end;
 	Err ->
 	    {error, {url_parsing_failed, Err}}
     end.
+
+merge_options(Host, Port, Options) ->
+    Config_options = get_config_value({options, Host, Port}, []),
+    lists:foldl(
+      fun({Key, Val}, Acc) ->
+			case lists:keysearch(Key, 1, Options) of
+			    false ->
+				[{Key, Val} | Acc];
+			    _ ->
+				Acc
+			end
+      end, Options, Config_options).
 
 get_lb_pid(Url) ->
     gen_server:call(?MODULE, {get_lb_pid, Url}).
@@ -354,8 +367,10 @@ send_req_direct(Conn_pid, Url, Headers, Method, Body, Options) ->
 %% returned by spawn_worker_process/2 or spawn_link_worker_process/2
 send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
     case catch parse_url(Url) of
-	#url{} = Parsed_url ->
-	    case do_send_req(Conn_pid, Parsed_url, Headers, Method, Body, Options, Timeout) of
+	#url{host = Host,
+	     port = Port} = Parsed_url ->
+	    Options_1 = merge_options(Host, Port, Options),
+	    case do_send_req(Conn_pid, Parsed_url, Headers, Method, Body, Options_1, Timeout) of
 		{error, {'EXIT', {noproc, _}}} ->
 		    {error, worker_is_dead};
 		Ret ->
