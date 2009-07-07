@@ -12,7 +12,7 @@
 <ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>The ibrowse application implements an HTTP 1.1 client.
 <p>Copyright © 2005-2009 Chandrashekhar Mullaparthi</p>
 
-<p><b>Version:</b> 1.5.0</p>
+<p><b>Version:</b> 1.5.1</p>
 <p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
 <p><b>Authors:</b> Chandrashekhar Mullaparthi (<a href="mailto:chandrashekhar dot mullaparthi at gmail dot com"><tt>chandrashekhar dot mullaparthi at gmail dot com</tt></a>).</p>
 
@@ -101,6 +101,8 @@ send_req/4, send_req/5, send_req/6.</p>
 <tr><td valign="top"><a href="#stop-0">stop/0</a></td><td>Stop the ibrowse process.</td></tr>
 <tr><td valign="top"><a href="#stop_worker_process-1">stop_worker_process/1</a></td><td>Terminate a worker process spawned using
   spawn_worker_process/2 or spawn_link_worker_process/2.</td></tr>
+<tr><td valign="top"><a href="#stream_next-1">stream_next/1</a></td><td>Tell ibrowse to stream the next chunk of data to the
+  caller.</td></tr>
 <tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#trace_off-0">trace_off/0</a></td><td>Turn tracing off for the ibrowse process.</td></tr>
 <tr><td valign="top"><a href="#trace_off-2">trace_off/2</a></td><td>Turn tracing OFF for all connections to the specified HTTP
@@ -177,7 +179,8 @@ send_req/4, send_req/5, send_req/6.</p>
 <li><tt><a name="type-respHeader">respHeader()</a> = {<a href="#type-headerName">headerName()</a>, <a href="#type-headerValue">headerValue()</a>}</tt></li>
 <li><tt><a name="type-headerName">headerName()</a> = string()</tt></li>
 <li><tt><a name="type-headerValue">headerValue()</a> = string()</tt></li>
-<li><tt><a name="type-response">response()</a> = {ok, Status, ResponseHeaders, ResponseBody} | {error, Reason}</tt></li>
+<li><tt><a name="type-response">response()</a> = {ok, Status, ResponseHeaders, ResponseBody} | {ibrowse_req_id, <a href="#type-req_id">req_id()</a>} | {error, Reason}</tt></li>
+<li><tt><a name="type-req_id">req_id()</a> = term()</tt></li>
 <li><tt>ResponseBody = string() | {file, Filename}</tt></li>
 <li><tt>Reason = term()</tt></li>
 </ul></p>
@@ -199,7 +202,8 @@ send_req/4, send_req/5, send_req/6.</p>
 <div class="spec">
 <p><tt>send_req(Url::string(), Headers::<a href="#type-headerList">headerList()</a>, Method::<a href="#type-method">method()</a>, Body::<a href="#type-body">body()</a>, Options::<a href="#type-optionList">optionList()</a>) -&gt; <a href="#type-response">response()</a></tt>
 <ul class="definitions"><li><tt><a name="type-optionList">optionList()</a> = [<a href="#type-option">option()</a>]</tt></li>
-<li><tt><a name="type-option">option()</a> = {max_sessions, integer()} | {response_format, <a href="#type-response_format">response_format()</a>} | {stream_chunk_size, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>} | {is_ssl, <a href="#type-boolean">boolean()</a>} | {ssl_options, [SSLOpt]} | {pool_name, atom()} | {proxy_host, string()} | {proxy_port, integer()} | {proxy_user, string()} | {proxy_password, string()} | {use_absolute_uri, <a href="#type-boolean">boolean()</a>} | {basic_auth, {<a href="#type-username">username()</a>, <a href="#type-password">password()</a>}} | {cookie, string()} | {content_length, integer()} | {content_type, string()} | {save_response_to_file, <a href="#type-srtf">srtf()</a>} | {stream_to, <a href="#type-process">process()</a>} | {http_vsn, {MajorVsn, MinorVsn}} | {host_header, string()} | {inactivity_timeout, integer()} | {connect_timeout, integer()} | {transfer_encoding, {chunked, ChunkSize}}</tt></li>
+<li><tt><a name="type-option">option()</a> = {max_sessions, integer()} | {response_format, <a href="#type-response_format">response_format()</a>} | {stream_chunk_size, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>} | {is_ssl, <a href="#type-boolean">boolean()</a>} | {ssl_options, [SSLOpt]} | {pool_name, atom()} | {proxy_host, string()} | {proxy_port, integer()} | {proxy_user, string()} | {proxy_password, string()} | {use_absolute_uri, <a href="#type-boolean">boolean()</a>} | {basic_auth, {<a href="#type-username">username()</a>, <a href="#type-password">password()</a>}} | {cookie, string()} | {content_length, integer()} | {content_type, string()} | {save_response_to_file, <a href="#type-srtf">srtf()</a>} | {stream_to, <a href="#type-stream_to">stream_to()</a>} | {http_vsn, {MajorVsn, MinorVsn}} | {host_header, string()} | {inactivity_timeout, integer()} | {connect_timeout, integer()} | {transfer_encoding, {chunked, ChunkSize}}</tt></li>
+<li><tt><a name="type-stream_to">stream_to()</a> = <a href="#type-process">process()</a> | {<a href="#type-process">process()</a>, once}</tt></li>
 <li><tt><a name="type-process">process()</a> = pid() | atom()</tt></li>
 <li><tt><a name="type-username">username()</a> = string()</tt></li>
 <li><tt><a name="type-password">password()</a> = string()</tt></li>
@@ -210,7 +214,7 @@ send_req/4, send_req/5, send_req/6.</p>
 <li><tt><a name="type-response_format">response_format()</a> = list | binary</tt></li>
 </ul></p>
 </div><p>Same as send_req/4.
-  For a description of SSL Options, look in the ssl manpage. If the
+  For a description of SSL Options, look in the <a href="http://www.erlang.org/doc/apps/ssl/index.html">ssl</a> manpage. If the
   HTTP Version to use is not specified, the default is 1.1.
   <br>
   <p>The <code>host_header</code> option is useful in the case where ibrowse is
@@ -221,6 +225,14 @@ send_req/4, send_req/5, send_req/6.</p>
   used to specify what should go in the <code>Host</code> header in
   the request.</p>
   <ul>
+  <li>The <code>stream_to</code> option can be used to have the HTTP
+  response streamed to a process as messages as data arrives on the
+  socket. If the calling process wishes to control the rate at which
+  data is received from the server, the option <code>{stream_to,
+  {process(), once}}</code> can be specified. The calling process
+  will have to invoke <code>ibrowse:stream_next(Request_id)</code> to
+  receive the next packet.</li>
+ 
   <li>When both the options <code>save_response_to_file</code> and <code>stream_to</code>
   are specified, the former takes precedence.</li>
  
@@ -360,6 +372,13 @@ send_req/4, send_req/5, send_req/6.</p>
   spawn_worker_process/2 or spawn_link_worker_process/2. Requests in
   progress will get the error response <pre>{error, closing_on_request}</pre></p>
 
+<h3 class="function"><a name="stream_next-1">stream_next/1</a></h3>
+<div class="spec">
+<p><tt>stream_next(Req_id::<a href="#type-req_id">req_id()</a>) -&gt; ok | {error, unknown_req_id}</tt></p>
+</div><p>Tell ibrowse to stream the next chunk of data to the
+  caller. Should be used in conjunction with the
+  <code>stream_to</code> option</p>
+
 <h3 class="function"><a name="terminate-2">terminate/2</a></h3>
 <div class="spec">
 <p><tt>terminate(Reason, State) -&gt; any()</tt></p>
@@ -392,6 +411,6 @@ send_req/4, send_req/5, send_req/6.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Jun 30 2009, 23:44:01.</i></p>
+<p><i>Generated by EDoc, Jul 7 2009, 23:13:24.</i></p>
 </body>
 </html>

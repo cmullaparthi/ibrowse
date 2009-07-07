@@ -1,18 +1,18 @@
 ibrowse is a HTTP client. The following are a list of features.
-	- RFC2616 compliant (AFAIK) 
-	- supports GET, POST, OPTIONS, HEAD, PUT, DELETE, TRACE, 
+        - RFC2616 compliant (AFAIK) 
+        - supports GET, POST, OPTIONS, HEAD, PUT, DELETE, TRACE, 
           MKCOL, PROPFIND, PROPPATCH, LOCK, UNLOCK, MOVE and COPY
-	- Understands HTTP/0.9, HTTP/1.0 and HTTP/1.1
-	- Understands chunked encoding
+        - Understands HTTP/0.9, HTTP/1.0 and HTTP/1.1
+        - Understands chunked encoding
         - Can generate requests using Chunked Transfer-Encoding
-	- Pools of connections to each webserver
-	- Pipelining support
-	- Download to file
-	- Asynchronous requests. Responses are streamed to a process
-	- Basic authentication
-	- Supports proxy authentication
-	- Can talk to Secure webservers using SSL
-	- any other features in the code not listed here :)
+        - Pools of connections to each webserver
+        - Pipelining support
+        - Download to file
+        - Asynchronous requests. Responses are streamed to a process
+        - Basic authentication
+        - Supports proxy authentication
+        - Can talk to Secure webservers using SSL
+        - any other features in the code not listed here :)
 
 ibrowse is available under two different licenses. LGPL and the BSD license.
 
@@ -24,24 +24,31 @@ Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
-29-06-2009 - * Fixed following issues reported by Oscar HellstrÃ¶m
+03-07-2009 - Added option {stream_to, {Pid, once}} which allows the caller
+             to control when it wants to receive more data. If this option
+             is used, the call ibrowse:stream_next(Req_id) should be used
+             to get more data.
+           - Patch submitted by Steve Vinoski to remove compiler warnings
+             about the use of obsolete guards
+
+29-06-2009 - * Fixed following issues reported by Oscar Hellström
                - Use {active, once} instead of {active, true}
-	       - Fix 'dodgy' timeout handling
-	       - Use binaries internally instead of lists to reduce memory
+               - Fix 'dodgy' timeout handling
+               - Use binaries internally instead of lists to reduce memory
                  consumption on 64 bit platforms. The default response format
                  is still 'list' to maintain backwards compatibility. Use the
                  option {response_format, binary} to get responses as binaries.
-	     * Fixed chunking bug (reported by Adam Kocoloski)
-	     * Added new option {inactivity_timeout, Milliseconds} to timeout
+             * Fixed chunking bug (reported by Adam Kocoloski)
+             * Added new option {inactivity_timeout, Milliseconds} to timeout
                requests if no data is received on the link for the specified
                interval. Useful when responses are large and links are flaky.
-	     * Added ibrowse:all_trace_off/0 to turn off all tracing
-	     * Change to the way responses to asynchronous requests are
+             * Added ibrowse:all_trace_off/0 to turn off all tracing
+             * Change to the way responses to asynchronous requests are
                returned. The following messages have been removed.
                 * {ibrowse_async_response, Req_id, {chunk_start, Chunk_size}}
- 		* {ibrowse_async_response, Req_id, chunk_end}
-	     * Fixed Makefiles as part of Debian packaging 
-	       (thanks to Thomas Lindgren)
+                 * {ibrowse_async_response, Req_id, chunk_end}
+             * Fixed Makefiles as part of Debian packaging 
+               (thanks to Thomas Lindgren)
              * Moved repository from Sourceforge to Github
 
 11-06-2009 - * Added option to control size of streamed chunks. Also added 
@@ -83,7 +90,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 17-10-2007 - Matthew Reilly (matthew dot reilly _at_ sipphone dot com) 
              sent a bug report and a fix. If the chunk trailer spans two TCP 
              packets, then ibrowse fails to recognise that the chunked transfer
-	     has ended.
+             has ended.
 
 29-08-2007 - Bug report by Peter Kristensen(ptx _at_ daimi dot au dot dk). 
              ibrowse crashes when the webserver returns just the Status line 
@@ -104,7 +111,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
               behaving correctly when the transfer encoding was not chunked.
 
-13-11-2006 -  YounÂs Hafri reported a bug where ibrowse was not returning the 
+13-11-2006 -  Youns Hafri reported a bug where ibrowse was not returning the 
                 temporary filename when the server was closing the connection 
                 after sending the data (as in HTTP/1.0).
               Released ibrowse under the BSD license
@@ -123,8 +130,8 @@ CONTRIBUTIONS & CHANGE HISTORY
 22-Nov-2005 - Added ability to generate requests using the Chunked 
               Transfer-Encoding.
 
-08-May-2005 - YounÂs Hafri made a CRUX LINUX port of ibrowse.
-	      http://yhafri.club.fr/crux/index.html
+08-May-2005 - Youns Hafri made a CRUX LINUX port of ibrowse.
+              http://yhafri.club.fr/crux/index.html
 
 Here are some usage examples. Enjoy!
 
@@ -147,10 +154,10 @@ Here are some usage examples. Enjoy!
 %% =============================================================================
 %% A GET using a proxy
 7> ibrowse:send_req("http://www.google.com/", [], get, [], 
-		 [{proxy_user, "XXXXX"},
-		  {proxy_password, "XXXXX"},
-		  {proxy_host, "proxy"},
-		  {proxy_port, 8080}], 1000).
+                 [{proxy_user, "XXXXX"},
+                  {proxy_password, "XXXXX"},
+                  {proxy_host, "proxy"},
+                  {proxy_port, 8080}], 1000).
 {ok,"302",
     [{"Date","Fri, 17 Dec 2004 15:22:56 GMT"},
      {"Content-Length","217"},
@@ -170,20 +177,20 @@ Here are some usage examples. Enjoy!
 %% be set using the application env var 'download_dir' - the default
 %% is the current working directory.
 8> ibrowse:send_req("http://www.erlang.se/", [], get, [],
-		 [{proxy_user, "XXXXX"},
-		  {proxy_password, "XXXXX"},
-		  {proxy_host, "proxy"},
-		  {proxy_port, 8080},
-		  {save_response_to_file, true}], 1000).
+                 [{proxy_user, "XXXXX"},
+                  {proxy_password, "XXXXX"},
+                  {proxy_host, "proxy"},
+                  {proxy_port, 8080},
+                  {save_response_to_file, true}], 1000).
 {error,req_timedout}
 
 %% =============================================================================
 9> ibrowse:send_req("http://www.erlang.se/", [], get, [],
-		 [{proxy_user, "XXXXX"},
-		  {proxy_password, "XXXXX"},
-		  {proxy_host, "proxy"},
-		  {proxy_port, 8080},
-		  {save_response_to_file, true}], 5000).
+                 [{proxy_user, "XXXXX"},
+                  {proxy_password, "XXXXX"},
+                  {proxy_host, "proxy"},
+                  {proxy_port, 8080},
+                  {save_response_to_file, true}], 5000).
 {ok,"200",
     [{"Transfer-Encoding","chunked"},
      {"Date","Fri, 17 Dec 2004 15:24:36 GMT"},
@@ -197,7 +204,7 @@ Here are some usage examples. Enjoy!
 %% number of maximum connections to this server to 10 and the pipeline
 %% size to 1. Connections are setup a required.
 11> ibrowse:set_dest("www.hotmail.com", 80, [{max_sessions, 10},
-					     {max_pipeline_size, 1}]).
+                                             {max_pipeline_size, 1}]).
 ok
 
 %% =============================================================================
@@ -231,51 +238,51 @@ ok
 %% =============================================================================
 %% Example of using Asynchronous requests
 18> ibrowse:send_req("http://www.google.com", [], get, [], 
-		     [{proxy_user, "XXXXX"}, 
-		      {proxy_password, "XXXXX"}, 
-		      {proxy_host, "proxy"}, 
-		      {proxy_port, 8080}, 
-		      {stream_to, self()}]).
+                     [{proxy_user, "XXXXX"}, 
+                      {proxy_password, "XXXXX"}, 
+                      {proxy_host, "proxy"}, 
+                      {proxy_port, 8080}, 
+                      {stream_to, self()}]).
 {ibrowse_req_id,{1115,327256,389608}}
 19> flush().
 Shell got {ibrowse_async_headers,{1115,327256,389608},
-	   "302",
-	   [{"Date","Thu, 05 May 2005 21:06:41 GMT"},
-	    {"Content-Length","217"},
-	    {"Content-Type","text/html"},
-	    {"Set-Cookie",
-	     "PREF=ID=b601f16bfa32f071:CR=1:TM=1115327201:LM=1115327201:S=OX5hSB525AMjUUu7; expires=Sun, 17-Jan-2038 19:14:07 GMT; path=/; domain=.google.com"},
-	    {"Server","GWS/2.1"},
-	    {"Location",
-	     "http://www.google.co.uk/cxfer?c=PREF%3D:TM%3D1115327201:S%3DDS9pDJ4IHcAuZ_AS&prev=/"},
-	    {"Via",
-	     "1.1 hatproxy01 (NetCache NetApp/5.6.2)"}]}
+           "302",
+           [{"Date","Thu, 05 May 2005 21:06:41 GMT"},
+            {"Content-Length","217"},
+            {"Content-Type","text/html"},
+            {"Set-Cookie",
+             "PREF=ID=b601f16bfa32f071:CR=1:TM=1115327201:LM=1115327201:S=OX5hSB525AMjUUu7; expires=Sun, 17-Jan-2038 19:14:07 GMT; path=/; domain=.google.com"},
+            {"Server","GWS/2.1"},
+            {"Location",
+             "http://www.google.co.uk/cxfer?c=PREF%3D:TM%3D1115327201:S%3DDS9pDJ4IHcAuZ_AS&prev=/"},
+            {"Via",
+             "1.1 hatproxy01 (NetCache NetApp/5.6.2)"}]}
 Shell got {ibrowse_async_response,{1115,327256,389608},
-	   "<HTML><HEAD><TITLE>302 Moved</TITLE></HEAD><BODY>\n<H1>302 Moved</H1>\nThe document has moved\n<A HREF=\"http://www.google.co.uk/cxfer?c=PREF%3D:TM%3D1115327201:S%3DDS9pDJ4IHcAuZ_AS&amp;prev=/\">here</A>.\r\n</BODY></HTML>\r\n"}
+           "<HTML><HEAD><TITLE>302 Moved</TITLE></HEAD><BODY>\n<H1>302 Moved</H1>\nThe document has moved\n<A HREF=\"http://www.google.co.uk/cxfer?c=PREF%3D:TM%3D1115327201:S%3DDS9pDJ4IHcAuZ_AS&amp;prev=/\">here</A>.\r\n</BODY></HTML>\r\n"}
 Shell got {ibrowse_async_response_end,{1115,327256,389608}}
 ok
 
 %% =============================================================================
 %% Another example of using async requests
 24> ibrowse:send_req("http://yaws.hyber.org/simple_ex2.yaws", [], get, [], 
-		     [{proxy_user, "XXXXX"}, 
-		      {proxy_password, "XXXXX"}, 
-		      {proxy_host, "proxy"}, 
-		      {proxy_port, 8080}, 
-		      {stream_to, self()}]).
+                     [{proxy_user, "XXXXX"}, 
+                      {proxy_password, "XXXXX"}, 
+                      {proxy_host, "proxy"}, 
+                      {proxy_port, 8080}, 
+                      {stream_to, self()}]).
 {ibrowse_req_id,{1115,327430,512314}}
 25> flush().
 Shell got {ibrowse_async_headers,{1115,327430,512314},
-	   "200", 
-	   [{"Date","Thu, 05 May 2005 20:58:08 GMT"},
-	    {"Content-Length","64"},
-	    {"Content-Type","text/html;charset="},
-	    {"Server",
-	     "Yaws/1.54 Yet Another Web Server"},
-	    {"Via",
-	     "1.1 hatproxy01 (NetCache NetApp/5.6.2)"}]}
+           "200", 
+           [{"Date","Thu, 05 May 2005 20:58:08 GMT"},
+            {"Content-Length","64"},
+            {"Content-Type","text/html;charset="},
+            {"Server",
+             "Yaws/1.54 Yet Another Web Server"},
+            {"Via",
+             "1.1 hatproxy01 (NetCache NetApp/5.6.2)"}]}
 Shell got {ibrowse_async_response,{1115,327430,512314},
-	   "<html>\n\n\n<h1> Yesssssss </h1>\n\n<h2> Hello again </h2>\n\n\n</html>\n"}
+           "<html>\n\n\n<h1> Yesssssss </h1>\n\n<h2> Hello again </h2>\n\n\n</html>\n"}
 Shell got {ibrowse_async_response_end,{1115,327430,512314}}
 
 %% =============================================================================
@@ -287,12 +294,12 @@ Shell got {ibrowse_async_response_end,{1115,327430,512314}}
 
 %% Example of request using both Proxy-Authorization and authorization by the final webserver.
 17> ibrowse:send_req("http://www.erlang.se/lic_area/protected/patches/erl_756_otp_beam.README", 
-		     [], get, [], 
-		     [{proxy_user, "XXXXX"}, 
-		      {proxy_password, "XXXXX"}, 
-		      {proxy_host, "proxy"}, 
-		      {proxy_port, 8080}, 
-		      {basic_auth, {"XXXXX", "XXXXXX"}}]).
+                     [], get, [], 
+                     [{proxy_user, "XXXXX"}, 
+                      {proxy_password, "XXXXX"}, 
+                      {proxy_host, "proxy"}, 
+                      {proxy_port, 8080}, 
+                      {basic_auth, {"XXXXX", "XXXXXX"}}]).
 {ok,"200",
     [{"Accept-Ranges","bytes"},
      {"Date","Thu, 05 May 2005 21:02:09 GMT"},
@@ -309,10 +316,10 @@ Shell got {ibrowse_async_response_end,{1115,327430,512314}}
 %% support this. Nor did www.google.com. But good old BBC supports
 %% this.
 35> 37> ibrowse:send_req("http://www.bbc.co.uk/", [], trace, [], 
-			 [{proxy_user, "XXXXX"},
-			  {proxy_password, "XXXXX"},
-			  {proxy_host, "proxy"},
-			  {proxy_port, 8080}]).         
+                         [{proxy_user, "XXXXX"},
+                          {proxy_password, "XXXXX"},
+                          {proxy_host, "proxy"},
+                          {proxy_port, 8080}]).         
 {ok,"200",
     [{"Transfer-Encoding","chunked"},
      {"Date","Thu, 05 May 2005 21:40:27 GMT"},

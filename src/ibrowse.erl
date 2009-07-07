@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
 %% @copyright 2005-2009 Chandrashekhar Mullaparthi
-%% @version 1.5.0
+%% @version 1.5.1
 %% @doc The ibrowse application implements an HTTP 1.1 client. This
 %% module implements the API of the HTTP client. There is one named
 %% process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is
@@ -89,6 +89,7 @@
 	 send_req_direct/5,
 	 send_req_direct/6,
 	 send_req_direct/7,
+	 stream_next/1,
 	 set_max_sessions/3,
 	 set_max_pipeline_size/3,
 	 set_dest/3,
@@ -150,7 +151,8 @@ stop() ->
 %% respHeader() = {headerName(), headerValue()}
 %% headerName() = string()
 %% headerValue() = string()
-%% response() = {ok, Status, ResponseHeaders, ResponseBody} | {error, Reason}
+%% response() = {ok, Status, ResponseHeaders, ResponseBody} | {ibrowse_req_id, req_id() } | {error, Reason}
+%% req_id() = term()
 %% ResponseBody = string() | {file, Filename}
 %% Reason = term()
 send_req(Url, Headers, Method) ->
@@ -167,7 +169,7 @@ send_req(Url, Headers, Method, Body) ->
     send_req(Url, Headers, Method, Body, []).
 
 %% @doc Same as send_req/4. 
-%% For a description of SSL Options, look in the ssl manpage. If the
+%% For a description of SSL Options, look in the <a href="http://www.erlang.org/doc/apps/ssl/index.html">ssl</a> manpage. If the
 %% HTTP Version to use is not specified, the default is 1.1.
 %% <br/>
 %% <p>The <code>host_header</code> option is useful in the case where ibrowse is
@@ -179,6 +181,14 @@ send_req(Url, Headers, Method, Body) ->
 %% used to specify what should go in the <code>Host</code> header in
 %% the request.</p>
 %% <ul>
+%% <li>The <code>stream_to</code> option can be used to have the HTTP
+%% response streamed to a process as messages as data arrives on the
+%% socket. If the calling process wishes to control the rate at which
+%% data is received from the server, the option <code>{stream_to,
+%% {process(), once}}</code> can be specified. The calling process
+%% will have to invoke <code>ibrowse:stream_next(Request_id)</code> to
+%% receive the next packet.</li>
+%%
 %% <li>When both the options <code>save_response_to_file</code> and <code>stream_to</code> 
 %% are specified, the former takes precedence.</li>
 %%
@@ -237,13 +247,14 @@ send_req(Url, Headers, Method, Body) ->
 %%          {content_length, integer()}        |
 %%          {content_type, string()}           |
 %%          {save_response_to_file, srtf()}    |
-%%          {stream_to, process()}             |
+%%          {stream_to, stream_to()}           |
 %%          {http_vsn, {MajorVsn, MinorVsn}}   |
 %%          {host_header, string()}            |
 %%          {inactivity_timeout, integer()}    |
 %%          {connect_timeout, integer()}       |
 %%          {transfer_encoding, {chunked, ChunkSize}}
 %%
+%% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()
 %% username() = string()
 %% password() = string()
@@ -425,7 +436,20 @@ send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
 	Err ->
 	    {error, {url_parsing_failed, Err}}
     end.
-    
+
+%% @doc Tell ibrowse to stream the next chunk of data to the
+%% caller. Should be used in conjunction with the
+%% <code>stream_to</code> option
+%% @spec stream_next(Req_id :: req_id()) -> ok | {error, unknown_req_id}
+stream_next(Req_id) ->    
+    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+	[] ->
+	    {error, unknown_req_id};
+	[{_, Pid}] ->
+	    catch Pid ! {stream_next, Req_id},
+	    ok
+    end.
+
 %% @doc Turn tracing on for the ibrowse process
 trace_on() ->
     ibrowse ! {trace, true}.
@@ -522,6 +546,7 @@ init(_) ->
     put(ibrowse_trace_token, "ibrowse"),
     ets:new(ibrowse_lb, [named_table, public, {keypos, 2}]),
     ets:new(ibrowse_conf, [named_table, protected, {keypos, 2}]),
+    ets:new(ibrowse_stream, [named_table, public]),
     import_config(),
     {ok, #state{}}.
 
@@ -539,9 +564,9 @@ import_config(Filename) ->
 	{ok, Terms} ->
 	    ets:delete_all_objects(ibrowse_conf),
 	    Fun = fun({dest, Host, Port, MaxSess, MaxPipe, Options}) 
-		     when list(Host), integer(Port),
-		     integer(MaxSess), MaxSess > 0,
-		     integer(MaxPipe), MaxPipe > 0, list(Options) ->
+		     when is_list(Host), is_integer(Port),
+		          is_integer(MaxSess), MaxSess > 0,
+		          is_integer(MaxPipe), MaxPipe > 0, is_list(Options) ->
 			  I = [{{max_sessions, Host, Port}, MaxSess},
 			       {{max_pipeline_size, Host, Port}, MaxPipe},
 			       {{options, Host, Port}, Options}],
@@ -641,13 +666,6 @@ handle_info(all_trace_off, State) ->
 		      true ->
 			  catch Pid ! {trace, false}
 		  end;
-	     (#client_conn{key = {H, P, Pid}}, _) ->
-		  case lists:member({H, P}, Trace_on_dests) of
-		      false ->
-			  ok;
-		      true ->
-			  catch Pid ! {trace, false}
-		  end;
 	     (_, Acc) ->
 		  Acc
 	  end,
@@ -661,10 +679,6 @@ handle_info({trace, Bool}, State) ->
 
 handle_info({trace, Bool, Host, Port}, State) ->
     Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _)
-	     when H == Host,
-		  P == Port ->
-		  catch Pid ! {trace, Bool};
-	     (#client_conn{key = {H, P, Pid}}, _)
 	     when H == Host,
 		  P == Port ->
 		  catch Pid ! {trace, Bool};
