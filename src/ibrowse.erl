@@ -372,10 +372,11 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
 	    Ret
     end.
 
-ensure_bin(L) when is_list(L) ->
-    list_to_binary(L);
-ensure_bin(B) when is_binary(B) ->
-    B.
+ensure_bin(L) when is_list(L)                     -> list_to_binary(L);
+ensure_bin(B) when is_binary(B)                   -> B;
+ensure_bin(Fun) when is_function(Fun)             -> Fun;
+ensure_bin({Fun}) when is_function(Fun)           -> Fun;
+ensure_bin({Fun, _} = Body) when is_function(Fun) -> Body.
 
 %% @doc Creates a HTTP client process to the specified Host:Port which
 %% is not part of the load balancing pool. This is useful in cases
