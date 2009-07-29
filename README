@@ -18,12 +18,22 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.1
+Version : 1.5.2
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+29-07-2009 - * The ETS table created for load balancing of requests was not
+               being deleted which led to the node not being able to create
+               any more ETS tables if queries were made to many number of 
+               webservers. ibrowse now deletes the ETS table it creates once the
+               last connection to a webserver is dropped. 
+               Reported by Seth Falcon.
+             * Spurious data being returned at end of body in certain cases of
+               chunked encoded responses from the server. 
+               Reported by Chris Newcombe.
+
 03-07-2009 - Added option {stream_to, {Pid, once}} which allows the caller
              to control when it wants to receive more data. If this option
              is used, the call ibrowse:stream_next(Req_id) should be used
