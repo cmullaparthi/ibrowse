@@ -228,6 +228,10 @@ send_req(Url, Headers, Method, Body) ->
 %% </li>
 %% </ul>
 %% 
+%% <li> The <code>socket_options</code> option can be used to set
+%% specific options on the socket. The <code>{active, true | false | once}</code> 
+%% and <code>{packet_type, Packet_type}</code> will be filtered out by ibrowse.  </li>
+%%
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method(), Body::body(), Options::optionList()) -> response()
 %% optionList() = [option()]
 %% option() = {max_sessions, integer()}        |
@@ -253,6 +257,7 @@ send_req(Url, Headers, Method, Body) ->
 %%          {host_header, string()}            |
 %%          {inactivity_timeout, integer()}    |
 %%          {connect_timeout, integer()}       |
+%%          {socket_options, Sock_opts}        |
 %%          {transfer_encoding, {chunked, ChunkSize}}
 %%
 %% stream_to() = process() | {process(), once}
@@ -260,6 +265,8 @@ send_req(Url, Headers, Method, Body) ->
 %% username() = string()
 %% password() = string()
 %% SSLOpt = term()
+%% Sock_opts = [Sock_opt]
+%% Sock_opt = term()
 %% ChunkSize = integer()
 %% srtf() = boolean() | filename()
 %% filename() = string()

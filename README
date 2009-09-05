@@ -18,12 +18,14 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.2
+Version : 1.5.3
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+05-09-2009 - * Introduced option to allow caller to set socket options.
+
 29-07-2009 - * The ETS table created for load balancing of requests was not
                being deleted which led to the node not being able to create
                any more ETS tables if queries were made to many number of 
