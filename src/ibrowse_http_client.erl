@@ -413,14 +413,30 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
 	    State
     end.
 
-do_connect(Host, Port, _Options, #state{is_ssl=true, ssl_options=SSLOptions}, Timeout) ->
+do_connect(Host, Port, Options, #state{is_ssl=true, ssl_options=SSLOptions}, Timeout) ->
+    Caller_socket_options = get_value(socket_options, Options, []),
+    Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options),
     ssl:connect(Host, Port,
-		[binary, {nodelay, true}, {active, false} | SSLOptions],
+		[binary, {nodelay, true}, {active, false} | Other_sock_options],
 		Timeout);
-do_connect(Host, Port, _Options, _State, Timeout) ->
+do_connect(Host, Port, Options, _State, Timeout) ->
+    Caller_socket_options = get_value(socket_options, Options, []),
+    Other_sock_options = filter_sock_options(Caller_socket_options),
     gen_tcp:connect(Host, Port,
-		    [binary, {nodelay, true}, {active, false}],
+		    [binary, {nodelay, true}, {active, false} | Other_sock_options],
 		    Timeout).
+
+%% We don't want the caller to specify certain options
+filter_sock_options(Opts) ->
+    lists:filter(fun({active, _}) ->
+			 false;
+		    ({packet, _}) ->
+			 false;
+		    (list) ->
+			 false;
+		    (_) ->
+			 true
+		 end, Opts).
 
 do_send(Req, #state{socket = Sock, is_ssl = true})  ->  ssl:send(Sock, Req);
 do_send(Req, #state{socket = Sock, is_ssl = false}) ->  gen_tcp:send(Sock, Req).
