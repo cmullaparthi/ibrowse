@@ -297,10 +297,10 @@ handle_sock_data(Data, #state{status           = get_body,
 
 accumulate_response(Data,
 		    #state{
-		      cur_req = #request{save_response_to_file = true,
+		      cur_req = #request{save_response_to_file = Srtf,
 					 tmp_file_fd = undefined} = CurReq,
-		      http_status_code=[$2 | _]}=State) ->
-    TmpFilename = make_tmp_filename(),
+		      http_status_code=[$2 | _]}=State) when Srtf /= false ->
+    TmpFilename = make_tmp_filename(Srtf),
     case file:open(TmpFilename, [write, delayed_write, raw]) of
 	{ok, Fd} ->
 	    accumulate_response(Data, State#state{
@@ -310,23 +310,23 @@ accumulate_response(Data,
 	{error, Reason} ->
 	    {error, {file_open_error, Reason}}
     end;
-accumulate_response(Data, #state{cur_req = #request{save_response_to_file = true,
+accumulate_response(Data, #state{cur_req = #request{save_response_to_file = Srtf,
 						    tmp_file_fd = Fd},
 				 transfer_encoding=chunked,
 				 reply_buffer = Reply_buf,
 				 http_status_code=[$2 | _]
-				} = State) ->
+				} = State) when Srtf /= false ->
     case file:write(Fd, [Reply_buf, Data]) of
 	ok ->
 	    State#state{reply_buffer = <<>>};
 	{error, Reason} ->
 	    {error, {file_write_error, Reason}}
     end;
-accumulate_response(Data, #state{cur_req = #request{save_response_to_file = true,
+accumulate_response(Data, #state{cur_req = #request{save_response_to_file = Srtf,
 						    tmp_file_fd = Fd},
 				 reply_buffer = RepBuf,
 				 http_status_code=[$2 | _]
-				} = State) ->
+				} = State) when Srtf /= false ->
     case file:write(Fd, [RepBuf, Data]) of
 	ok ->
 	    State#state{reply_buffer = <<>>};
@@ -364,14 +364,16 @@ accumulate_response(Data, #state{reply_buffer = RepBuf,
 	    State#state{reply_buffer = RepBuf_1}
     end.
 
-make_tmp_filename() ->
+make_tmp_filename(true) ->
     DownloadDir = ibrowse:get_config_value(download_dir, filename:absname("./")),
     {A,B,C} = now(),
     filename:join([DownloadDir,
 		   "ibrowse_tmp_file_"++
 		   integer_to_list(A) ++
 		   integer_to_list(B) ++
-		   integer_to_list(C)]).
+		   integer_to_list(C)]);
+make_tmp_filename(File) when is_list(File) ->
+    File.
 
 
 %%--------------------------------------------------------------------

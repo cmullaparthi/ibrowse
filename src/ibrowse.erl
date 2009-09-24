@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
 %% @copyright 2005-2009 Chandrashekhar Mullaparthi
-%% @version 1.5.2
+%% @version 1.5.4
 %% @doc The ibrowse application implements an HTTP 1.1 client. This
 %% module implements the API of the HTTP client. There is one named
 %% process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is

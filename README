@@ -18,12 +18,16 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.3
+Version : 1.5.4
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+24-09-2009 - * When a filename was supplied with the 'save_response_to_file' 
+               option, the option was being ignored. Bug report from 
+               Adam Kocoloski
+
 05-09-2009 - * Introduced option to allow caller to set socket options.
 
 29-07-2009 - * The ETS table created for load balancing of requests was not
