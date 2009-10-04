@@ -18,12 +18,15 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.4
+Version : 1.5.5
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+04-10-2009 - * Patch from Kostis Sagonas to cleanup some code and suppress
+               dialyzer warnings
+
 24-09-2009 - * When a filename was supplied with the 'save_response_to_file' 
                option, the option was being ignored. Bug report from 
                Adam Kocoloski

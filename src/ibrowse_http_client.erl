@@ -195,10 +195,10 @@ handle_info({ssl_error, _Sock}, State) ->
     {stop, normal, State};
 
 handle_info({req_timedout, From}, State) ->
-    case lists:keysearch(From, #request.from, queue:to_list(State#state.reqs)) of
+    case lists:keymember(From, #request.from, queue:to_list(State#state.reqs)) of
 	false ->
 	    {noreply, State};
-	{value, _} ->
+	true ->
 	    shutting_down(State),
 	    do_error_reply(State, req_timedout),
 	    {stop, normal, State}
@@ -254,9 +254,6 @@ handle_sock_data(Data, #state{status = get_header}=State) ->
 	{error, _Reason} ->
 	    shutting_down(State),
 	    {stop, normal, State};
-	stop ->
-	    shutting_down(State),
-	    {stop, normal, State};
 	State_1 ->
 	    active_once(State_1),
 	    {noreply, State_1, get_inac_timeout(State_1)}
@@ -285,9 +282,6 @@ handle_sock_data(Data, #state{status           = get_body,
 		    shutting_down(State),
 		    fail_pipelined_requests(State,
 					    {error, {Reason, {stat_code, StatCode}, Headers}}),
-		    {stop, normal, State};
-		stop ->
-		    shutting_down(State),
 		    {stop, normal, State};
 		State_1 ->
 		    active_once(State_1),
@@ -379,7 +373,7 @@ make_tmp_filename(File) when is_list(File) ->
 %%--------------------------------------------------------------------
 %% Handles the case when the server closes the socket
 %%--------------------------------------------------------------------
-handle_sock_closed(#state{status=get_header}=State) ->
+handle_sock_closed(#state{status=get_header} = State) ->
     shutting_down(State),
     do_error_reply(State, connection_closed);
 
@@ -695,7 +689,7 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options, UseProxy) ->
 	               is_function(Body) ->
 		Headers;
 	    false when is_binary(Body) ->
-		[{"content-length", integer_to_list(size(Body))} | Headers];
+		[{"content-length", integer_to_list(byte_size(Body))} | Headers];
 	    false ->
 		[{"content-length", integer_to_list(length(Body))} | Headers];
 	    _ ->
@@ -759,20 +753,18 @@ chunk_request_body(Body, ChunkSize) ->
 chunk_request_body(Body, _ChunkSize, Acc) when Body == <<>>; Body == [] ->
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk | Acc]);
-chunk_request_body(Body, ChunkSize, Acc) when is_binary(Body),
-                                              size(Body) >= ChunkSize ->
+chunk_request_body(Body, ChunkSize, Acc) when byte_size(Body) >= ChunkSize ->
     <<ChunkBody:ChunkSize/binary, Rest/binary>> = Body,
     Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
 	     ChunkBody, "\r\n"],
     chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
 chunk_request_body(Body, _ChunkSize, Acc) when is_binary(Body) ->
-    BodySize = size(Body),
+    BodySize = byte_size(Body),
     Chunk = [ibrowse_lib:dec2hex(4, BodySize),"\r\n",
 	     Body, "\r\n"],
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk, Chunk | Acc]);
-chunk_request_body(Body, ChunkSize, Acc) when is_list(Body),
-                                              length(Body) >= ChunkSize ->
+chunk_request_body(Body, ChunkSize, Acc) when length(Body) >= ChunkSize ->
     {ChunkBody, Rest} = split_list_at(Body, ChunkSize),
     Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
 	     ChunkBody, "\r\n"],
@@ -822,7 +814,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
 		    State_2 = reset_state(State_1_1),
 		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
 		    parse_response(Data_1, State_3);
-		_ when hd(StatCode) == $1 ->
+		_ when hd(StatCode) =:= $1 ->
 		    %% No message body is expected. Server may send
 		    %% one or more 1XX responses before a proper
 		    %% response.
@@ -830,8 +822,8 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
 		    do_trace("Recvd a status code of ~p. Ignoring and waiting for a proper response~n", [StatCode]),
 		    parse_response(Data_1, State_1#state{recvd_headers = [],
 							 status = get_header});
-		_ when StatCode == "204";
-		       StatCode == "304" ->
+		_ when StatCode =:= "204";
+		       StatCode =:= "304" ->
 		    %% No message body is expected for these Status Codes.
 		    %% RFC2616 - Sec 4.4
 		    {_, Reqs_1} = queue:out(Reqs),
@@ -842,7 +834,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
 		    State_2 = reset_state(State_1_1),
 		    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
 		    parse_response(Data_1, State_3);
-		_ when TransferEncoding == "chunked" ->
+		_ when TransferEncoding =:= "chunked" ->
 		    do_trace("Chunked encoding detected...~n",[]),
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 		    case parse_11_response(Data_1, State_1#state{transfer_encoding=chunked,
@@ -856,8 +848,8 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
 			State_2 ->
 			    State_2
 		    end;
-		undefined when HttpVsn == "HTTP/1.0";
-			       ConnClose == "close" ->
+		undefined when HttpVsn =:= "HTTP/1.0";
+			       ConnClose =:= "close" ->
 		    send_async_headers(ReqId, StreamTo, StatCode, Headers_1),
 		    State_1#state{reply_buffer = Data_1};
 		undefined ->
@@ -911,23 +903,20 @@ parse_11_response(DataRecvd,
 			} = State) ->
     case scan_crlf(Chunk_sz_buf, DataRecvd) of
 	{yes, ChunkHeader, Data_1} ->
-	    case parse_chunk_header(ChunkHeader) of
-		{error, Reason} ->
-		    {error, Reason};
-		ChunkSize ->
-		    %%
-		    %% Do we have to preserve the chunk encoding when
-		    %% streaming? NO. This should be transparent to the client
-		    %% process. Chunked encoding was only introduced to make
-		    %% it efficient for the server.
-		    %%
-		    RemLen = size(Data_1),
-		    do_trace("Determined chunk size: ~p. Already recvd: ~p~n", [ChunkSize, RemLen]),
-		    parse_11_response(Data_1, State#state{chunk_size_buffer = <<>>,
-							  deleted_crlf = true,
-							  recvd_chunk_size = 0,
-							  chunk_size = ChunkSize})
-	    end;
+	    ChunkSize = parse_chunk_header(ChunkHeader),
+	    %%
+	    %% Do we have to preserve the chunk encoding when
+	    %% streaming? NO. This should be transparent to the client
+	    %% process. Chunked encoding was only introduced to make
+	    %% it efficient for the server.
+	    %%
+	    RemLen = size(Data_1),
+	    do_trace("Determined chunk size: ~p. Already recvd: ~p~n",
+		     [ChunkSize, RemLen]),
+	    parse_11_response(Data_1, State#state{chunk_size_buffer = <<>>,
+						  deleted_crlf = true,
+						  recvd_chunk_size = 0,
+						  chunk_size = ChunkSize});
 	{no, Data_1} ->
 	    State#state{chunk_size_buffer = Data_1}
     end;
@@ -1109,13 +1098,13 @@ parse_headers(StatusLine, Headers) ->
 %    SP. A recipient MAY replace any linear white space with a single
 %    SP before interpreting the field value or forwarding the message
 %    downstream.
-	parse_headers_1(B) when is_binary(B) ->
-					   parse_headers_1(binary_to_list(B));
-	parse_headers_1(String) ->
-					   parse_headers_1(String, [], []).
+parse_headers_1(B) when is_binary(B) ->
+    parse_headers_1(binary_to_list(B));
+parse_headers_1(String) ->
+    parse_headers_1(String, [], []).
 
-parse_headers_1([$\n, H |T], [$\r | L], Acc) when H == 32;
-						  H == $\t ->
+parse_headers_1([$\n, H |T], [$\r | L], Acc) when H =:= 32;
+						  H =:= $\t ->
     parse_headers_1(lists:dropwhile(fun(X) ->
 					    is_whitespace(X)
 				    end, T), [32 | L], Acc);
@@ -1154,10 +1143,9 @@ parse_status_line([H | T], get_status_code, ProtVsn, StatCode) ->
 parse_status_line([], _, _, _) ->
     http_09.
 
-parse_header(B) when is_binary(B) ->
-    parse_header(binary_to_list(B));
 parse_header(L) ->
     parse_header(L, []).
+
 parse_header([$: | V], Acc) ->
     {lists:reverse(Acc), string:strip(V)};
 parse_header([H | T], Acc) ->
@@ -1174,12 +1162,12 @@ scan_header(Bin) ->
 	    {no, Bin}
     end.
 
-scan_header(Bin1, Bin2) when size(Bin1) < 4 ->
+scan_header(Bin1, Bin2) when byte_size(Bin1) < 4 ->
     scan_header(<<Bin1/binary, Bin2/binary>>);
 scan_header(Bin1, <<>>) ->
     scan_header(Bin1);
 scan_header(Bin1, Bin2) ->
-    Bin1_already_scanned_size = size(Bin1) - 4,
+    Bin1_already_scanned_size = byte_size(Bin1) - 4,
     <<Headers_prefix:Bin1_already_scanned_size/binary, Rest/binary>> = Bin1,
     Bin_to_scan = <<Rest/binary, Bin2/binary>>,
     case get_crlf_crlf_pos(Bin_to_scan, 0) of
@@ -1205,10 +1193,10 @@ scan_crlf(Bin) ->
 
 scan_crlf(<<>>, Bin2) ->
     scan_crlf(Bin2);
-scan_crlf(Bin1, Bin2) when size(Bin1) < 2 ->
+scan_crlf(Bin1, Bin2) when byte_size(Bin1) < 2 ->
     scan_crlf(<<Bin1/binary, Bin2/binary>>);
 scan_crlf(Bin1, Bin2) ->
-    scan_crlf_1(size(Bin1) - 2, Bin1, Bin2).
+    scan_crlf_1(byte_size(Bin1) - 2, Bin1, Bin2).
 
 scan_crlf_1(Bin1_head_size, Bin1, Bin2) ->
     <<Bin1_head:Bin1_head_size/binary, Bin1_tail/binary>> = Bin1,
@@ -1227,13 +1215,6 @@ get_crlf_pos(Bin) ->
 get_crlf_pos(<<$\r, $\n, _/binary>>, Pos) -> {yes, Pos};
 get_crlf_pos(<<_, Rest/binary>>, Pos)     -> get_crlf_pos(Rest, Pos + 1);
 get_crlf_pos(<<>>, _)                     -> no.
-
-%% scan_crlf(<<$\n, T/binary>>, [$\r | L]) -> {yes, lists:reverse(L), T};
-%% scan_crlf(<<H, T/binary>>,  L)          -> scan_crlf(T, [H|L]);
-%% scan_crlf(<<>>, L)                      -> {no, L};
-%% scan_crlf([$\n|T], [$\r | L])           -> {yes, lists:reverse(L), T};
-%% scan_crlf([H|T],  L)                    -> scan_crlf(T, [H|L]);
-%% scan_crlf([], L)                        -> {no, L}.
 
 fmt_val(L) when is_list(L)    -> L;
 fmt_val(I) when is_integer(I) -> integer_to_list(I);
@@ -1286,8 +1267,6 @@ method(copy)      -> "COPY".
 %% The parsing implemented here discards all chunk extensions. It also
 %% strips trailing spaces from the chunk size fields as Apache 1.3.27 was
 %% sending them.
-parse_chunk_header([]) ->
-    throw({error, invalid_chunk_size});
 parse_chunk_header(ChunkHeader) ->
     parse_chunk_header(ChunkHeader, []).
 
@@ -1308,7 +1287,6 @@ is_whitespace($\r) -> true;
 is_whitespace($\n) -> true;
 is_whitespace($\t) -> true;
 is_whitespace(_)   -> false.
-
 
 send_async_headers(_ReqId, undefined, _StatCode, _Headers) ->
     ok;
@@ -1388,6 +1366,7 @@ fail_pipelined_requests(#state{reqs = Reqs, cur_req = CurReq} = State, Reply) ->
 
 split_list_at(List, N) ->
     split_list_at(List, N, []).
+
 split_list_at([], _, Acc) ->
     {lists:reverse(Acc), []};
 split_list_at(List2, 0, List1) ->
@@ -1397,6 +1376,7 @@ split_list_at([H | List2], N, List1) ->
 
 hexlist_to_integer(List) ->
     hexlist_to_integer(lists:reverse(List), 1, 0).
+
 hexlist_to_integer([H | T], Multiplier, Acc) ->
     hexlist_to_integer(T, Multiplier*16, Multiplier*to_ascii(H) + Acc);
 hexlist_to_integer([], _, Acc) ->
