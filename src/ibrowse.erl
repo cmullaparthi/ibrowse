@@ -226,11 +226,15 @@ send_req(Url, Headers, Method, Body) ->
 %% request to complete will be 1000 milliseconds minus the time taken
 %% for connection setup.
 %% </li>
-%% </ul>
 %% 
 %% <li> The <code>socket_options</code> option can be used to set
 %% specific options on the socket. The <code>{active, true | false | once}</code> 
 %% and <code>{packet_type, Packet_type}</code> will be filtered out by ibrowse.  </li>
+%%
+%% <li> The <code>headers_as_is</code> option is to enable the caller
+%% to send headers exactly as specified in the request without ibrowse
+%% adding some of its own. Required for some picky servers apparently.  </li>
+%% </ul>
 %%
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method(), Body::body(), Options::optionList()) -> response()
 %% optionList() = [option()]
@@ -258,7 +262,8 @@ send_req(Url, Headers, Method, Body) ->
 %%          {inactivity_timeout, integer()}    |
 %%          {connect_timeout, integer()}       |
 %%          {socket_options, Sock_opts}        |
-%%          {transfer_encoding, {chunked, ChunkSize}}
+%%          {transfer_encoding, {chunked, ChunkSize}} | 
+%%          {headers_as_is, boolean()}
 %%
 %% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()

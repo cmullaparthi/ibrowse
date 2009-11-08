@@ -81,7 +81,8 @@ start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
 stop(Conn_pid) ->
-    gen_server:call(Conn_pid, stop).
+    catch gen_server:call(Conn_pid, stop),
+    ok.
 
 send_req(Conn_Pid, Url, Headers, Method, Body, Options, Timeout) ->
     gen_server:call(
@@ -527,8 +528,6 @@ send_req_1(From,
     end;
 send_req_1(From,
 	   #url{abspath = AbsPath,
-		host    = Host,
-		port    = Port,
 		path    = RelPath} = Url,
 	   Headers, Method, Body, Options, Timeout,
 	   #state{status = Status,
@@ -565,18 +564,9 @@ send_req_1(From,
 		      response_format        = Resp_format,
 		      from                   = From},
     State_1 = State#state{reqs=queue:in(NewReq, State#state.reqs)},
-    Headers_1 = add_auth_headers(Url, Options, Headers, State_1),
-    HostHeaderValue = case lists:keysearch(host_header, 1, Options) of
-			  false ->
-			      case Port of
-				  80 -> Host;
-				  _ -> [Host, ":", integer_to_list(Port)]
-			      end;
-			  {value, {_, Host_h_val}} ->
-			      Host_h_val
-		      end,
+    Headers_1 = maybe_modify_headers(Url, Options, Headers, State_1),
     {Req, Body_1} = make_request(Method,
-				 [{"Host", HostHeaderValue} | Headers_1],
+				 Headers_1,
 				 AbsPath, RelPath, Body, Options, State_1#state.use_proxy),
     case get(my_trace_flag) of
 	true ->
@@ -626,6 +616,25 @@ send_req_1(From,
 	    do_trace("Send failed... Reason: ~p~n", [Err]),
 	    gen_server:reply(From, {error, send_failed}),
 	    {stop, normal, State_1}
+    end.
+
+maybe_modify_headers(#url{host = Host, port = Port} = Url,
+                     Options, Headers, State) ->
+    case get_value(headers_as_is, Options, false) of
+        false ->
+            Headers_1 = add_auth_headers(Url, Options, Headers, State),
+            HostHeaderValue = case lists:keysearch(host_header, 1, Options) of
+                                  false ->
+                                      case Port of
+                                          80 -> Host;
+                                          _ -> [Host, ":", integer_to_list(Port)]
+                                      end;
+                                  {value, {_, Host_h_val}} ->
+                                      Host_h_val
+                              end,
+            [{"Host", HostHeaderValue} | Headers_1];
+        true ->
+            Headers
     end.
 
 add_auth_headers(#url{username = User,

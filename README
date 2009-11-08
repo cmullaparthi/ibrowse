@@ -18,12 +18,14 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.5
+Version : 1.5.6
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+08-11-2009 - * Added option headers_as_is
+
 04-10-2009 - * Patch from Kostis Sagonas to cleanup some code and suppress
                dialyzer warnings
 
