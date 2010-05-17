@@ -4,7 +4,6 @@
 %%% Created : 14 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 
 -module(ibrowse_test).
--vsn('$Id: ibrowse_test.erl,v 1.4 2009/07/01 22:43:19 chandrusf Exp $ ').
 -export([
 	 load_test/3,
 	 send_reqs_1/3,

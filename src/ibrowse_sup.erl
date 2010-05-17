@@ -6,8 +6,6 @@
 %%% Created : 15 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_sup).
--vsn('$Id: ibrowse_sup.erl,v 1.1 2005/05/05 22:28:28 chandrusf Exp $ ').
-
 -behaviour(supervisor).
 %%--------------------------------------------------------------------
 %% Include files

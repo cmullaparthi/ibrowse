@@ -6,8 +6,6 @@
 %%% Created :  6 Mar 2008 by chandru <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 -module(ibrowse_lb).
-
--vsn('$Id: ibrowse_lb.erl,v 1.2 2009/07/01 22:43:19 chandrusf Exp $ ').
 -author(chandru).
 -behaviour(gen_server).
 %%--------------------------------------------------------------------

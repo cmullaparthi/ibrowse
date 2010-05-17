@@ -10,9 +10,9 @@
 
 <h1>Module ibrowse</h1>
 <ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>The ibrowse application implements an HTTP 1.1 client.
-<p>Copyright © 2005-2009 Chandrashekhar Mullaparthi</p>
+<p>Copyright © 2005-2010 Chandrashekhar Mullaparthi</p>
 
-<p><b>Version:</b> 1.5.2</p>
+<p><b>Version:</b> 1.6.0</p>
 <p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
 <p><b>Authors:</b> Chandrashekhar Mullaparthi (<a href="mailto:chandrashekhar dot mullaparthi at gmail dot com"><tt>chandrashekhar dot mullaparthi at gmail dot com</tt></a>).</p>
 
@@ -28,23 +28,23 @@ send_req/4, send_req/5, send_req/6.</p>
  
   <p>Here are a few sample invocations.</p>
  
-  <p><code>
+  <code>
   ibrowse:send_req("http://intranet/messenger/", [], get).
   <br><br>
  
   ibrowse:send_req("http://www.google.com/", [], get, [],
-  		 [{proxy_user, "XXXXX"},
-  		  {proxy_password, "XXXXX"},
-  		  {proxy_host, "proxy"},
-  		  {proxy_port, 8080}], 1000).
+                [{proxy_user, "XXXXX"},
+                 {proxy_password, "XXXXX"},
+                 {proxy_host, "proxy"},
+                 {proxy_port, 8080}], 1000).
   <br><br>
  
  ibrowse:send_req("http://www.erlang.org/download/otp_src_R10B-3.tar.gz", [], get, [],
-  		 [{proxy_user, "XXXXX"},
-  		  {proxy_password, "XXXXX"},
-  		  {proxy_host, "proxy"},
-  		  {proxy_port, 8080},
-  		  {save_response_to_file, true}], 1000).
+                [{proxy_user, "XXXXX"},
+                 {proxy_password, "XXXXX"},
+                 {proxy_host, "proxy"},
+                 {proxy_port, 8080},
+                 {save_response_to_file, true}], 1000).
   <br><br>
  
   ibrowse:send_req("http://www.erlang.org", [], head).
@@ -58,11 +58,8 @@ send_req/4, send_req/5, send_req/6.</p>
   <br><br>
   ibrowse:send_req("http://www.google.com", [], get, [],
                     [{stream_to, self()}]).
-  </code></p>
+  </code>
  
-  <p>A driver exists which implements URL encoding in C, but the
-  speed achieved using only erlang has been good enough, so the
-  driver isn't actually used.</p>
 <h2><a name="index">Function Index</a></h2>
 <table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all_trace_off-0">all_trace_off/0</a></td><td>Turn Off ALL tracing.</td></tr>
 <tr><td valign="top"><a href="#code_change-3">code_change/3</a></td><td></td></tr>
@@ -93,10 +90,12 @@ send_req/4, send_req/5, send_req/6.</p>
 <tr><td valign="top"><a href="#show_dest_status-0">show_dest_status/0</a></td><td></td></tr>
 <tr><td valign="top"><a href="#show_dest_status-2">show_dest_status/2</a></td><td>Shows some internal information about load balancing to a
   specified Host:Port.</td></tr>
-<tr><td valign="top"><a href="#spawn_link_worker_process-2">spawn_link_worker_process/2</a></td><td>Same as spawn_worker_process/2 except the the calling process
+<tr><td valign="top"><a href="#spawn_link_worker_process-1">spawn_link_worker_process/1</a></td><td>Same as spawn_worker_process/1 except the the calling process
   is linked to the worker process which is spawned.</td></tr>
-<tr><td valign="top"><a href="#spawn_worker_process-2">spawn_worker_process/2</a></td><td>Creates a HTTP client process to the specified Host:Port which
+<tr><td valign="top"><a href="#spawn_link_worker_process-2">spawn_link_worker_process/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#spawn_worker_process-1">spawn_worker_process/1</a></td><td>Creates a HTTP client process to the specified Host:Port which
   is not part of the load balancing pool.</td></tr>
+<tr><td valign="top"><a href="#spawn_worker_process-2">spawn_worker_process/2</a></td><td></td></tr>
 <tr><td valign="top"><a href="#start-0">start/0</a></td><td>Starts the ibrowse process without linking.</td></tr>
 <tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td>Starts the ibrowse process linked to the calling process.</td></tr>
 <tr><td valign="top"><a href="#stop-0">stop/0</a></td><td>Stop the ibrowse process.</td></tr>
@@ -203,7 +202,7 @@ send_req/4, send_req/5, send_req/6.</p>
 <div class="spec">
 <p><tt>send_req(Url::string(), Headers::<a href="#type-headerList">headerList()</a>, Method::<a href="#type-method">method()</a>, Body::<a href="#type-body">body()</a>, Options::<a href="#type-optionList">optionList()</a>) -&gt; <a href="#type-response">response()</a></tt>
 <ul class="definitions"><li><tt><a name="type-optionList">optionList()</a> = [<a href="#type-option">option()</a>]</tt></li>
-<li><tt><a name="type-option">option()</a> = {max_sessions, integer()} | {response_format, <a href="#type-response_format">response_format()</a>} | {stream_chunk_size, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>} | {is_ssl, <a href="#type-boolean">boolean()</a>} | {ssl_options, [SSLOpt]} | {pool_name, atom()} | {proxy_host, string()} | {proxy_port, integer()} | {proxy_user, string()} | {proxy_password, string()} | {use_absolute_uri, <a href="#type-boolean">boolean()</a>} | {basic_auth, {<a href="#type-username">username()</a>, <a href="#type-password">password()</a>}} | {cookie, string()} | {content_length, integer()} | {content_type, string()} | {save_response_to_file, <a href="#type-srtf">srtf()</a>} | {stream_to, <a href="#type-stream_to">stream_to()</a>} | {http_vsn, {MajorVsn, MinorVsn}} | {host_header, string()} | {inactivity_timeout, integer()} | {connect_timeout, integer()} | {socket_options, Sock_opts} | {transfer_encoding, {chunked, ChunkSize}}</tt></li>
+<li><tt><a name="type-option">option()</a> = {max_sessions, integer()} | {response_format, <a href="#type-response_format">response_format()</a>} | {stream_chunk_size, integer()} | {max_pipeline_size, integer()} | {trace, <a href="#type-boolean">boolean()</a>} | {is_ssl, <a href="#type-boolean">boolean()</a>} | {ssl_options, [SSLOpt]} | {pool_name, atom()} | {proxy_host, string()} | {proxy_port, integer()} | {proxy_user, string()} | {proxy_password, string()} | {use_absolute_uri, <a href="#type-boolean">boolean()</a>} | {basic_auth, {<a href="#type-username">username()</a>, <a href="#type-password">password()</a>}} | {cookie, string()} | {content_length, integer()} | {content_type, string()} | {save_response_to_file, <a href="#type-srtf">srtf()</a>} | {stream_to, <a href="#type-stream_to">stream_to()</a>} | {http_vsn, {MajorVsn, MinorVsn}} | {host_header, string()} | {inactivity_timeout, integer()} | {connect_timeout, integer()} | {socket_options, Sock_opts} | {transfer_encoding, {chunked, ChunkSize}} | {headers_as_is, <a href="#type-boolean">boolean()</a>} | {give_raw_headers, <a href="#type-boolean">boolean()</a>}</tt></li>
 <li><tt><a name="type-stream_to">stream_to()</a> = <a href="#type-process">process()</a> | {<a href="#type-process">process()</a>, once}</tt></li>
 <li><tt><a name="type-process">process()</a> = pid() | atom()</tt></li>
 <li><tt><a name="type-username">username()</a> = string()</tt></li>
@@ -220,14 +219,14 @@ send_req/4, send_req/5, send_req/6.</p>
   For a description of SSL Options, look in the <a href="http://www.erlang.org/doc/apps/ssl/index.html">ssl</a> manpage. If the
   HTTP Version to use is not specified, the default is 1.1.
   <br>
-  <p>The <code>host_header</code> option is useful in the case where ibrowse is
+  <ul>
+  <li>The <code>host_header</code> option is useful in the case where ibrowse is
   connecting to a component such as <a href="http://www.stunnel.org">stunnel</a> which then sets up a
   secure connection to a webserver. In this case, the URL supplied to
   ibrowse must have the stunnel host/port details, but that won't
   make sense to the destination webserver. This option can then be
   used to specify what should go in the <code>Host</code> header in
-  the request.</p>
-  <ul>
+  the request.</li>
   <li>The <code>stream_to</code> option can be used to have the HTTP
   response streamed to a process as messages as data arrives on the
   socket. If the calling process wishes to control the rate at which
@@ -272,11 +271,20 @@ send_req/4, send_req/5, send_req/6.</p>
   request to complete will be 1000 milliseconds minus the time taken
   for connection setup.
   </li>
-  </ul>
  
   <li> The <code>socket_options</code> option can be used to set
   specific options on the socket. The <code>{active, true | false | once}</code>
   and <code>{packet_type, Packet_type}</code> will be filtered out by ibrowse.  </li>
+ 
+  <li> The <code>headers_as_is</code> option is to enable the caller
+  to send headers exactly as specified in the request without ibrowse
+  adding some of its own. Required for some picky servers apparently.  </li>
+ 
+  <li>The <code>give_raw_headers</code> option is to enable the
+  caller to get access to the raw status line and raw unparsed
+  headers. Not quite sure why someone would want this, but one of my
+  users asked for it, so here it is. </li>
+  </ul>
  </p>
 
 <h3 class="function"><a name="send_req-6">send_req/6</a></h3>
@@ -340,15 +348,20 @@ send_req/4, send_req/5, send_req/6.</p>
   spawn_worker_process/2 or spawn_link_worker_process/2 is not
   included.</p>
 
-<h3 class="function"><a name="spawn_link_worker_process-2">spawn_link_worker_process/2</a></h3>
+<h3 class="function"><a name="spawn_link_worker_process-1">spawn_link_worker_process/1</a></h3>
 <div class="spec">
-<p><tt>spawn_link_worker_process(Host, Port) -&gt; any()</tt></p>
-</div><p>Same as spawn_worker_process/2 except the the calling process
+<p><tt>spawn_link_worker_process(Url::string()) -&gt; {ok, pid()}</tt></p>
+</div><p>Same as spawn_worker_process/1 except the the calling process
   is linked to the worker process which is spawned.</p>
 
-<h3 class="function"><a name="spawn_worker_process-2">spawn_worker_process/2</a></h3>
+<h3 class="function"><a name="spawn_link_worker_process-2">spawn_link_worker_process/2</a></h3>
 <div class="spec">
-<p><tt>spawn_worker_process(Host::string(), Port::integer()) -&gt; {ok, pid()}</tt></p>
+<p><tt>spawn_link_worker_process(Host::string(), Port::integer()) -&gt; {ok, pid()}</tt></p>
+</div>
+
+<h3 class="function"><a name="spawn_worker_process-1">spawn_worker_process/1</a></h3>
+<div class="spec">
+<p><tt>spawn_worker_process(Url::string()) -&gt; {ok, pid()}</tt></p>
 </div><p>Creates a HTTP client process to the specified Host:Port which
   is not part of the load balancing pool. This is useful in cases
   where some requests to a webserver might take a long time whereas
@@ -361,6 +374,11 @@ send_req/4, send_req/5, send_req/6.</p>
   <b>Note:</b> It is the responsibility of the calling process to control
   pipeline size on such connections.
  </p>
+
+<h3 class="function"><a name="spawn_worker_process-2">spawn_worker_process/2</a></h3>
+<div class="spec">
+<p><tt>spawn_worker_process(Host::string(), Port::integer()) -&gt; {ok, pid()}</tt></p>
+</div>
 
 <h3 class="function"><a name="start-0">start/0</a></h3>
 <div class="spec">
@@ -423,6 +441,6 @@ send_req/4, send_req/5, send_req/6.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Sep 5 2009, 23:59:48.</i></p>
+<p><i>Generated by EDoc, May 17 2010, 23:21:42.</i></p>
 </body>
 </html>

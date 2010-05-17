@@ -18,12 +18,25 @@ ibrowse is available under two different licenses. LGPL and the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.5.6
+Version : 1.5.7
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+12-05-2010 - * Added support for the CONNECT method to tunnel HTTPS through
+               a proxy. When a https URL is requested through a proxy, 
+               ibrowse will automatically use the CONNECT method to first
+               setup a tunnel through the proxy. Once this succeeds, the 
+               actual request is dispatched. Successfully tested with the 
+               new SSL implementation in R13B-03
+             * Added SSL support for direct connections. 
+               See ibrowse:spawn_worker_process/1 and 
+               ibrowse:spawn_link_worker_process/1
+             * Added option to return raw status line and raw unparsed headers
+
+23-04-2010 - * Fixes to URL parsing by Karol Skocik
+
 08-11-2009 - * Added option headers_as_is
 
 04-10-2009 - * Patch from Kostis Sagonas to cleanup some code and suppress
@@ -132,7 +145,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
               behaving correctly when the transfer encoding was not chunked.
 
-13-11-2006 -  Younès Hafri reported a bug where ibrowse was not returning the 
+13-11-2006 -  Youn¬ès Hafri reported a bug where ibrowse was not returning the 
                 temporary filename when the server was closing the connection 
                 after sending the data (as in HTTP/1.0).
               Released ibrowse under the BSD license
@@ -151,7 +164,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 22-Nov-2005 - Added ability to generate requests using the Chunked 
               Transfer-Encoding.
 
-08-May-2005 - Younès Hafri made a CRUX LINUX port of ibrowse.
+08-May-2005 - Youn¬ès Hafri made a CRUX LINUX port of ibrowse.
               http://yhafri.club.fr/crux/index.html
 
 Here are some usage examples. Enjoy!
