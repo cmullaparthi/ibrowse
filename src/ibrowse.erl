@@ -534,7 +534,7 @@ show_dest_status() ->
                                         Size = ets:info(Tid, size),
                                         io:format("~40.40s | ~-5.5s | ~-5.5s | ~s~n",
                                                   [Host ++ ":" ++ integer_to_list(Port),
-                                                   integer_to_list(Tid),
+                                                   io_lib:format("~p", [Tid]),
                                                    integer_to_list(Size),
                                                    io_lib:format("~p", [Lb_pid])]
                                                  )
