@@ -192,6 +192,7 @@ dump_errors(Key, Iod) ->
 		    {"http://www.google.co.uk", get},
 		    {"http://www.google.com", get},
 		    {"http://www.google.com", options},
+                    {"https://mail.google.com", get},
 		    {"http://www.sun.com", get},
 		    {"http://www.oracle.com", get},
 		    {"http://www.bbc.co.uk", get},
@@ -222,6 +223,7 @@ unit_tests() ->
     unit_tests([]).
 
 unit_tests(Options) ->
+    application:start(ssl),
     Options_1 = Options ++ [{connect_timeout, 5000}],
     {Pid, Ref} = erlang:spawn_monitor(?MODULE, unit_tests_1, [self(), Options_1]),
     receive 

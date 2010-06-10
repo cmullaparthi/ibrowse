@@ -18,12 +18,14 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.6.0
+Version : 1.6.1
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+10-06-2010 - * Fixed bug in https requests not going via the proxy
+
 12-05-2010 - * Added support for the CONNECT method to tunnel HTTPS through
                a proxy. When a https URL is requested through a proxy, 
                ibrowse will automatically use the CONNECT method to first

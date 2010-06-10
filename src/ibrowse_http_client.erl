@@ -460,6 +460,7 @@ filter_sock_options(Opts) ->
 
 do_send(Req, #state{socket = Sock,
                     is_ssl = true,
+                    use_proxy = true,
                     proxy_tunnel_setup = Pts}) when Pts /= done ->  gen_tcp:send(Sock, Req);
 do_send(Req, #state{socket = Sock, is_ssl = true})  ->  ssl:send(Sock, Req);
 do_send(Req, #state{socket = Sock, is_ssl = false}) ->  gen_tcp:send(Sock, Req).
