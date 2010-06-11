@@ -24,6 +24,9 @@ Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+11-06-2010 - * Removed use of deprecated concat_binary. Patch supplied by
+               Steve Vinoski
+
 10-06-2010 - * Fixed bug in https requests not going via the proxy
 
 12-05-2010 - * Added support for the CONNECT method to tunnel HTTPS through
