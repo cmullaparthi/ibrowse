@@ -177,79 +177,18 @@ dec2hex(M,N,Ack) -> dec2hex(M-1,N bsr 4,[d2h(N band 15)|Ack]).
 %% In = string() | binary()
 %% Out = string() | binary()
 encode_base64(List) when is_list(List) ->
-    encode_base64_1(list_to_binary(List));
+    binary_to_list(base64:encode(List));
 encode_base64(Bin) when is_binary(Bin) ->
-    List = encode_base64_1(Bin),
-    list_to_binary(List).
-
-encode_base64_1(<<A:6, B:6, C:6, D:6, Rest/binary>>) ->
-    [int_to_b64(A), int_to_b64(B),
-     int_to_b64(C), int_to_b64(D) | encode_base64_1(Rest)];
-encode_base64_1(<<A:6, B:6, C:4>>) ->
-    [int_to_b64(A), int_to_b64(B), int_to_b64(C bsl 2), $=];
-encode_base64_1(<<A:6, B:2>>) ->
-    [int_to_b64(A), int_to_b64(B bsl 4), $=, $=];
-encode_base64_1(<<>>) ->
-    [].
+    base64:encode(Bin).
 
 %% @doc Implements the base64 decoding algorithm. The output data type matches in the input data type.
 %% @spec decode_base64(In) -> Out | exit({error, invalid_input})
 %% In = string() | binary()
 %% Out = string() | binary()
 decode_base64(List) when is_list(List) ->
-    decode_base64_1(List, []);
+    binary_to_list(base64:decode(List));
 decode_base64(Bin) when is_binary(Bin) ->
-    List = decode_base64_1(binary_to_list(Bin), []),
-    list_to_binary(List).
-
-decode_base64_1([H | T], Acc) when ((H == $\t) or
-                                    (H == 32) or
-                                    (H == $\r) or
-                                    (H == $\n)) ->
-    decode_base64_1(T, Acc);
-
-decode_base64_1([$=, $=], Acc) ->
-    lists:reverse(Acc);
-decode_base64_1([$=, _ | _], _Acc) ->
-    exit({error, invalid_input});
-
-decode_base64_1([A1, B1, $=, $=], Acc) ->
-    A = b64_to_int(A1),
-    B = b64_to_int(B1),
-    Oct1 = (A bsl 2) bor (B bsr 4),
-    decode_base64_1([], [Oct1 | Acc]);
-decode_base64_1([A1, B1, C1, $=], Acc) ->
-    A = b64_to_int(A1),
-    B = b64_to_int(B1),
-    C = b64_to_int(C1),
-    Oct1 = (A bsl 2) bor (B bsr 4),
-    Oct2 = ((B band 16#f) bsl 6) bor (C bsr 2),
-    decode_base64_1([], [Oct2, Oct1 | Acc]);
-decode_base64_1([A1, B1, C1, D1 | T], Acc) ->
-    A = b64_to_int(A1),
-    B = b64_to_int(B1),
-    C = b64_to_int(C1),
-    D = b64_to_int(D1),
-    Oct1 = (A bsl 2) bor (B bsr 4),
-    Oct2 = ((B band 16#f) bsl 4) bor (C bsr 2),
-    Oct3 = ((C band 2#11) bsl 6) bor D,
-    decode_base64_1(T, [Oct3, Oct2, Oct1 | Acc]);
-decode_base64_1([], Acc) ->
-    lists:reverse(Acc).
-
-%% Taken from httpd_util.erl
-int_to_b64(X) when X >= 0, X =< 25 -> X + $A;
-int_to_b64(X) when X >= 26, X =< 51 -> X - 26 + $a;
-int_to_b64(X) when X >= 52, X =< 61 -> X - 52 + $0;
-int_to_b64(62) -> $+;
-int_to_b64(63) -> $/.
-
-%% Taken from httpd_util.erl
-b64_to_int(X) when X >= $A, X =< $Z -> X - $A;
-b64_to_int(X) when X >= $a, X =< $z -> X - $a + 26;
-b64_to_int(X) when X >= $0, X =< $9 -> X - $0 + 52;
-b64_to_int($+) -> 62;
-b64_to_int($/) -> 63.
+    base64:decode(Bin).
 
 get_value(Tag, TVL, DefVal) ->
     case lists:keysearch(Tag, 1, TVL) of

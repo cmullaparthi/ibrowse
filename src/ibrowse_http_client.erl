@@ -765,27 +765,7 @@ add_proxy_auth_headers(#state{proxy_auth_digest = Auth_digest}, Headers) ->
 http_auth_digest([], []) ->
     [];
 http_auth_digest(Username, Password) ->
-    encode_base64(Username ++ [$: | Password]).
-
-encode_base64([]) ->
-    [];
-encode_base64([A]) ->
-    [e(A bsr 2), e((A band 3) bsl 4), $=, $=];
-encode_base64([A,B]) ->
-    [e(A bsr 2), e(((A band 3) bsl 4) bor (B bsr 4)), e((B band 15) bsl 2), $=];
-encode_base64([A,B,C|Ls]) ->
-    encode_base64_do(A,B,C, Ls).
-encode_base64_do(A,B,C, Rest) ->
-    BB = (A bsl 16) bor (B bsl 8) bor C,
-    [e(BB bsr 18), e((BB bsr 12) band 63),
-     e((BB bsr 6) band 63), e(BB band 63)|encode_base64(Rest)].
-
-e(X) when X >= 0, X < 26 -> X+65;
-e(X) when X>25, X<52     -> X+71;
-e(X) when X>51, X<62     -> X-4;
-e(62)                    -> $+;
-e(63)                    -> $/;
-e(X)                     -> exit({bad_encode_base64_token, X}).
+    ibrowse_lib:encode_base64(Username ++ [$: | Password]).
 
 make_request(Method, Headers, AbsPath, RelPath, Body, Options,
              #state{use_proxy = UseProxy}) ->
