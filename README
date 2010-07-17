@@ -18,12 +18,15 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.6.1
+Version : 1.6.2
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+17-07-2010 - * Merged change made by Filipe David Manana to use the base64
+               module for encoding/decoding. 
+
 11-06-2010 - * Removed use of deprecated concat_binary. Patch supplied by
                Steve Vinoski
 
