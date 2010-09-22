@@ -18,12 +18,32 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 1.6.2
+Version : 2.0.0
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+22-09-2010 - * Added option preserve_chunked_encoding. This allows the caller to get
+               the raw HTTP response when the Transfer-Encoding is Chunked. This feature
+               was requested by Benoit Chesneau who wanted to write a HTTP proxy using
+               ibrowse.
+             * Fixed bug with the {stream_to, {Pid, once}} option. Bug report and lot
+               of help from Filipe David Manana. Thank you Filipe.
+             * The {error, conn_failed} and {error, send_failed} return values are
+               now of the form {error, {conn_failed, Err}} and 
+               {error, {send_failed, Err}}. This is so that the specific socket error
+               can be returned to the caller. I think it looks a bit ugly, but that
+               is the best compromise I could come up with.
+             * Added application configuration parameters default_max_sessions and
+               default_max_pipeline_size. These were previously hard coded to 10.
+             * Versioning of ibrowse now follows the Semantic Versioning principles.
+               See http://semver.org. Thanks to Anthony Molinaro for nudging me in
+               this direction.
+             * The connect_timeout option now only applies to the connection setup
+               phase. In previous versions, the time taken to setup the connection
+               was deducted from the specified timeout value for the request.
+
 17-07-2010 - * Merged change made by Filipe David Manana to use the base64
                module for encoding/decoding. 
 
@@ -153,7 +173,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 12-01-2007 -  Derek Upham sent in a bug fix. The reset_state function was not
               behaving correctly when the transfer encoding was not chunked.
 
-13-11-2006 -  Younès Hafri reported a bug where ibrowse was not returning the 
+13-11-2006 -  Youn¬ès Hafri reported a bug where ibrowse was not returning the 
                 temporary filename when the server was closing the connection 
                 after sending the data (as in HTTP/1.0).
               Released ibrowse under the BSD license
@@ -172,7 +192,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 22-Nov-2005 - Added ability to generate requests using the Chunked 
               Transfer-Encoding.
 
-08-May-2005 - Younès Hafri made a CRUX LINUX port of ibrowse.
+08-May-2005 - Youn¬ès Hafri made a CRUX LINUX port of ibrowse.
               http://yhafri.club.fr/crux/index.html
 
 Here are some usage examples. Enjoy!
