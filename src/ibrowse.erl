@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
 %% @copyright 2005-2010 Chandrashekhar Mullaparthi
-%% @version 2.0.0
+%% @version 2.0.1
 %% @doc The ibrowse application implements an HTTP 1.1 client. This
 %% module implements the API of the HTTP client. There is one named
 %% process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is
@@ -334,7 +334,6 @@ try_routing_request(Lb_pid, Parsed_url,
             case do_send_req(Conn_Pid, Parsed_url, Headers,
                              Method, Body, Options_1, Timeout) of
                 {error, sel_conn_closed} ->
-                    io:format("Selected connection closed. Trying again...~n", []),
                     try_routing_request(Lb_pid, Parsed_url,
                                         Max_sessions, 
                                         Max_pipeline_size,

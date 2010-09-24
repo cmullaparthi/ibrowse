@@ -305,12 +305,10 @@ handle_sock_data(Data, #state{status           = get_body,
                     {stop, normal, State};
                 #state{cur_req = #request{caller_controls_socket = Ccs},
                        interim_reply_sent = Irs} = State_1 ->
-                    %% io:format("Irs: ~p~n", [Irs]),
                     case Irs of
                         true ->
                             active_once(State_1);
                         false when Ccs == true ->
-                            %% io:format("Setting {active,once}~n", []),
                             do_setopts(Socket, [{active, once}], State);
                         false ->
                             active_once(State_1)
@@ -1168,13 +1166,6 @@ parse_11_response(DataRecvd,
             {RemChunk, RemData} = split_binary(DataRecvd, NeedBytes),
             do_trace("Recvd another chunk...~p~n", [RemChunk]),
             do_trace("RemData -> ~p~n", [RemData]),
-            case RemData of
-                <<>> ->
-                    %% io:format("RemData -> ~p~n", [RemData]);
-                    ok;
-                _ ->
-                    ok
-            end,
             case accumulate_response(RemChunk, State) of
                 {error, Reason} ->
                     do_trace("Error accumulating response --> ~p~n", [Reason]),
