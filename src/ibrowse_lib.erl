@@ -208,10 +208,17 @@ parse_url(Url) ->
 parse_url([$:, $/, $/ | _], get_protocol, Url, []) ->
     {invalid_uri_1, Url};
 parse_url([$:, $/, $/ | T], get_protocol, Url, TmpAcc) ->
-    Prot = list_to_atom(lists:reverse(TmpAcc)),
-    parse_url(T, get_username, 
-              Url#url{protocol = Prot},
-              []);
+    %% Verify that the Protocol is supported and avoid atom pulution
+    case lists:member(lists:reverse(TmpAcc), ["http", "https"]) of
+        true ->
+            Prot = list_to_atom(lists:reverse(TmpAcc)),
+            parse_url(T, get_username, 
+                      Url#url{protocol = Prot},
+                      []);
+        false ->
+            %% Protocol not supported 
+            {invalid_uri_3, get_protocol, Url, TmpAcc}
+    end;
 parse_url([H | T], get_username, Url, TmpAcc) when H == $/;
                                                    H == $? ->
     Path = case H of

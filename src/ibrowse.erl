@@ -87,6 +87,7 @@
          send_req_direct/6,
          send_req_direct/7,
          stream_next/1,
+         stream_close/1,
          set_max_sessions/3,
          set_max_pipeline_size/3,
          set_dest/3,
@@ -521,6 +522,19 @@ stream_next(Req_id) ->
             {error, unknown_req_id};
         [{_, Pid}] ->
             catch Pid ! {stream_next, Req_id},
+            ok
+    end.
+
+%% @doc Tell ibrowse to close the stream.
+%% Should be used in conjunction with the
+%% <code>stream_to</code> option
+%% @spec stream_close(Req_id :: req_id()) -> ok | {error, unknown_req_id}
+stream_close(Req_id) ->    
+    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+        [] ->
+            {error, unknown_req_id};
+        [{_, Pid}] ->
+            catch Pid ! {stream_close, Req_id},
             ok
     end.
 
