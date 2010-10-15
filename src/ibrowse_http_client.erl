@@ -1364,6 +1364,8 @@ parse_status_line([32 | T], get_prot_vsn, ProtVsn, StatCode) ->
     parse_status_line(T, get_status_code, ProtVsn, StatCode);
 parse_status_line([32 | T], get_status_code, ProtVsn, StatCode) ->
     {ok, lists:reverse(ProtVsn), lists:reverse(StatCode), T};
+parse_status_line([], get_status_code, ProtVsn, StatCode) ->
+    {ok, lists:reverse(ProtVsn), lists:reverse(StatCode), []};
 parse_status_line([H | T], get_prot_vsn, ProtVsn, StatCode) ->
     parse_status_line(T, get_prot_vsn, [H|ProtVsn], StatCode);
 parse_status_line([H | T], get_status_code, ProtVsn, StatCode) ->
