@@ -42,11 +42,11 @@ Erik Reitsma
 Filipe David Manana
 Geoff Cant
 Jeroen Koops
-Jo„o Lopes
+Jo√£o Lopes
 Karol Skocik
 Kostis Sagonas
 Matthew Reilly
-Oscar Hellstrˆm
+Oscar Hellstr√∂m
 Paul J. Davis
 Peter Kristensen
 Ram Krishnan
@@ -70,7 +70,7 @@ CONTRIBUTIONS & CHANGE HISTORY
                http://github.com/cmullaparthi/ibrowse/issues/issue/11
 
              * Prevent atom table pollution when bogus URLs are input to 
-               ibrowse. Bug report by Jo„o Lopes.
+               ibrowse. Bug report by Jo√£o Lopes.
                http://github.com/cmullaparthi/ibrowse/issues/issue/13
 
              * Automatically do Chunked-Transfer encoding of request body 
@@ -94,7 +94,7 @@ CONTRIBUTIONS & CHANGE HISTORY
 
              * Added ibrowse:stream_close/1 to close the connection 
                associated with a certain response stream. Patch provided by
-               Jo„o Lopes. 
+               Jo√£o Lopes. 
 
              * Prevent port number being included in the Host header when port
                443 is intended. Bug reported by Andrew Tunnell-Jones
@@ -183,7 +183,7 @@ CONTRIBUTIONS & CHANGE HISTORY
            - Patch submitted by Steve Vinoski to remove compiler warnings
              about the use of obsolete guards
 
-29-06-2009 - * Fixed following issues reported by Oscar Hellstrˆm
+29-06-2009 - * Fixed following issues reported by Oscar Hellstr√∂m
                - Use {active, once} instead of {active, true}
                - Fix 'dodgy' timeout handling
                - Use binaries internally instead of lists to reduce memory
