@@ -9,14 +9,14 @@
 <hr>
 
 <h1>Module ibrowse</h1>
-<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>The ibrowse application implements an HTTP 1.1 client.
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>The ibrowse application implements an HTTP 1.1 client in erlang.
 <p>Copyright © 2005-2010 Chandrashekhar Mullaparthi</p>
 
-<p><b>Version:</b> 2.0.1</p>
+<p><b>Version:</b> 2.1.0</p>
 <p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
 <p><b>Authors:</b> Chandrashekhar Mullaparthi (<a href="mailto:chandrashekhar dot mullaparthi at gmail dot com"><tt>chandrashekhar dot mullaparthi at gmail dot com</tt></a>).</p>
 
-<h2><a name="description">Description</a></h2><p>The ibrowse application implements an HTTP 1.1 client. This  
+<h2><a name="description">Description</a></h2><p>The ibrowse application implements an HTTP 1.1 client in erlang. This  
 module implements the API of the HTTP client. There is one named  
 process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is  
 one process to handle one TCP connection to a webserver  
@@ -87,20 +87,24 @@ send_req/4, send_req/5, send_req/6.</p>
 <tr><td valign="top"><a href="#set_dest-3">set_dest/3</a></td><td>Deprecated.</td></tr>
 <tr><td valign="top"><a href="#set_max_pipeline_size-3">set_max_pipeline_size/3</a></td><td>Set the maximum pipeline size for each connection to a specific Host:Port.</td></tr>
 <tr><td valign="top"><a href="#set_max_sessions-3">set_max_sessions/3</a></td><td>Set the maximum number of connections allowed to a specific Host:Port.</td></tr>
-<tr><td valign="top"><a href="#show_dest_status-0">show_dest_status/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#show_dest_status-0">show_dest_status/0</a></td><td>Shows some internal information about load balancing.</td></tr>
 <tr><td valign="top"><a href="#show_dest_status-2">show_dest_status/2</a></td><td>Shows some internal information about load balancing to a
   specified Host:Port.</td></tr>
 <tr><td valign="top"><a href="#spawn_link_worker_process-1">spawn_link_worker_process/1</a></td><td>Same as spawn_worker_process/1 except the the calling process
   is linked to the worker process which is spawned.</td></tr>
-<tr><td valign="top"><a href="#spawn_link_worker_process-2">spawn_link_worker_process/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#spawn_link_worker_process-2">spawn_link_worker_process/2</a></td><td>Same as spawn_worker_process/2 except the the calling process
+  is linked to the worker process which is spawned.</td></tr>
 <tr><td valign="top"><a href="#spawn_worker_process-1">spawn_worker_process/1</a></td><td>Creates a HTTP client process to the specified Host:Port which
   is not part of the load balancing pool.</td></tr>
-<tr><td valign="top"><a href="#spawn_worker_process-2">spawn_worker_process/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#spawn_worker_process-2">spawn_worker_process/2</a></td><td>Same as spawn_worker_process/1 but takes as input a Host and Port
+  instead of a URL.</td></tr>
 <tr><td valign="top"><a href="#start-0">start/0</a></td><td>Starts the ibrowse process without linking.</td></tr>
 <tr><td valign="top"><a href="#start_link-0">start_link/0</a></td><td>Starts the ibrowse process linked to the calling process.</td></tr>
 <tr><td valign="top"><a href="#stop-0">stop/0</a></td><td>Stop the ibrowse process.</td></tr>
 <tr><td valign="top"><a href="#stop_worker_process-1">stop_worker_process/1</a></td><td>Terminate a worker process spawned using
   spawn_worker_process/2 or spawn_link_worker_process/2.</td></tr>
+<tr><td valign="top"><a href="#stream_close-1">stream_close/1</a></td><td>Tell ibrowse to close the connection associated with the
+  specified stream.</td></tr>
 <tr><td valign="top"><a href="#stream_next-1">stream_next/1</a></td><td>Tell ibrowse to stream the next chunk of data to the
   caller.</td></tr>
 <tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
@@ -245,11 +249,15 @@ send_req/4, send_req/5, send_req/6.</p>
   information as it has, such as HTTP Status Code and HTTP Headers. When this happens, the response
   is of the form <code>{error, {Reason, {stat_code, StatusCode}, HTTP_headers}}</code></li>
  
-  <li>The <code>inactivity_timeout</code> option is useful when
-  dealing with large response bodies and/or slow links. In these
-  cases, it might be hard to estimate how long a request will take to
-  complete. In such cases, the client might want to timeout if no
-  data has been received on the link for a certain time interval.</li>
+  <li><p>The <code>inactivity_timeout</code> option is useful when  
+dealing with large response bodies and/or slow links. In these  
+cases, it might be hard to estimate how long a request will take to  
+complete. In such cases, the client might want to timeout if no  
+data has been received on the link for a certain time interval.</p>
+ 
+  This value is also used to close connections which are not in use for
+  the specified timeout value.
+  </li>
  
   <li>
   The <code>connect_timeout</code> option is to specify how long the
@@ -343,7 +351,9 @@ send_req/4, send_req/5, send_req/6.</p>
 <h3 class="function"><a name="show_dest_status-0">show_dest_status/0</a></h3>
 <div class="spec">
 <p><tt>show_dest_status() -&gt; any()</tt></p>
-</div>
+</div><p>Shows some internal information about load balancing. Info
+  about workers spawned using spawn_worker_process/2 or
+  spawn_link_worker_process/2 is not included.</p>
 
 <h3 class="function"><a name="show_dest_status-2">show_dest_status/2</a></h3>
 <div class="spec">
@@ -362,7 +372,8 @@ send_req/4, send_req/5, send_req/6.</p>
 <h3 class="function"><a name="spawn_link_worker_process-2">spawn_link_worker_process/2</a></h3>
 <div class="spec">
 <p><tt>spawn_link_worker_process(Host::string(), Port::integer()) -&gt; {ok, pid()}</tt></p>
-</div>
+</div><p>Same as spawn_worker_process/2 except the the calling process
+  is linked to the worker process which is spawned.</p>
 
 <h3 class="function"><a name="spawn_worker_process-1">spawn_worker_process/1</a></h3>
 <div class="spec">
@@ -383,7 +394,8 @@ send_req/4, send_req/5, send_req/6.</p>
 <h3 class="function"><a name="spawn_worker_process-2">spawn_worker_process/2</a></h3>
 <div class="spec">
 <p><tt>spawn_worker_process(Host::string(), Port::integer()) -&gt; {ok, pid()}</tt></p>
-</div>
+</div><p>Same as spawn_worker_process/1 but takes as input a Host and Port
+  instead of a URL.</p>
 
 <h3 class="function"><a name="start-0">start/0</a></h3>
 <div class="spec">
@@ -406,6 +418,15 @@ send_req/4, send_req/5, send_req/6.</p>
 </div><p>Terminate a worker process spawned using
   spawn_worker_process/2 or spawn_link_worker_process/2. Requests in
   progress will get the error response <pre>{error, closing_on_request}</pre></p>
+
+<h3 class="function"><a name="stream_close-1">stream_close/1</a></h3>
+<div class="spec">
+<p><tt>stream_close(Req_id::<a href="#type-req_id">req_id()</a>) -&gt; ok | {error, unknown_req_id}</tt></p>
+</div><p>Tell ibrowse to close the connection associated with the
+  specified stream.  Should be used in conjunction with the
+  <code>stream_to</code> option. Note that all requests in progress on
+  the connection which is serving this Req_id will be aborted, and an
+  error returned.</p>
 
 <h3 class="function"><a name="stream_next-1">stream_next/1</a></h3>
 <div class="spec">
@@ -446,6 +467,6 @@ send_req/4, send_req/5, send_req/6.</p>
 <hr>
 
 <div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
-<p><i>Generated by EDoc, Sep 24 2010, 06:42:36.</i></p>
+<p><i>Generated by EDoc, Nov 10 2010, 06:04:33.</i></p>
 </body>
 </html>

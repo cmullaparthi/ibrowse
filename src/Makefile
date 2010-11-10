@@ -24,7 +24,7 @@ $(EBIN)/%.beam: %.erl
 	${ERLC} $(COMPILER_OPTIONS) $(INCLUDE_DIRS) -o ../ebin $<
 
 $(EBIN)/%.app:	%.app.src ../vsn.mk Makefile
-	sed -e s^%IBROWSE_VSN%^$(IBROWSE_VSN)^ \
+	sed -e s/%IBROWSE_VSN%/$(IBROWSE_VSN)/ \
 		 $< > $@
 
 clean:
