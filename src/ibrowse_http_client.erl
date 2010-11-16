@@ -831,17 +831,13 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options,
     Headers_0 = [Fun1(X) || X <- Headers],
     Headers_1 =
         case lists:keysearch("content-length", 1, Headers_0) of
-            false when (Body == []) orelse
-                       (Body == <<>>) orelse
-                       is_tuple(Body) orelse
-                       is_function(Body) ->
-                Headers_0;
-            false when is_binary(Body) ->
-                [{"content-length", "content-length", integer_to_list(size(Body))} | Headers_0];
-            false when is_list(Body) ->
-                [{"content-length", "content-length", integer_to_list(length(Body))} | Headers_0];
+            false when (Body == [] orelse Body == <<>>) andalso
+                       (Method == post orelse Method == put) ->
+                [{"content-length", "Content-Length", "0"} | Headers_0];
+            false when is_binary(Body) orelse is_list(Body) ->
+                [{"content-length", "Content-Length", integer_to_list(iolist_size(Body))} | Headers_0];
             _ ->
-                %% Content-Length is already specified
+                %% Content-Length is already specified or Body is a function or function/state pair
                 Headers_0
         end,
     {Headers_2, Body_1} =
