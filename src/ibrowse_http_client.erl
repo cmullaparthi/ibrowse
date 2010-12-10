@@ -683,8 +683,7 @@ send_req_1(From,
                 path    = RelPath} = Url,
            Headers, Method, Body, Options, Timeout,
            #state{status    = Status,
-                  socket    = Socket,
-                  is_ssl    = Is_ssl} = State) ->
+                  socket    = Socket} = State) ->
     ReqId = make_req_id(),
     Resp_format = get_value(response_format, Options, list),
     Caller_socket_options = get_value(socket_options, Options, []),
@@ -723,7 +722,7 @@ send_req_1(From,
                                  Headers_1,
                                  AbsPath, RelPath, Body, Options, State_1),
     trace_request(Req),
-    do_setopts(Socket, Caller_socket_options, Is_ssl),
+    do_setopts(Socket, Caller_socket_options, State_1),
     TE = is_chunked_encoding_specified(Options),
     case do_send(Req, State_1) of
         ok ->
