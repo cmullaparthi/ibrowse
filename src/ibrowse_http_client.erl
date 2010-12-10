@@ -69,7 +69,7 @@
                      ]).
 
 -define(DEFAULT_STREAM_CHUNK_SIZE, 1024*1024).
-
+-define(dec2hex(X), erlang:integer_to_list(X, 16)).
 %%====================================================================
 %% External functions
 %%====================================================================
@@ -369,15 +369,6 @@ accumulate_response(Data, #state{cur_req = #request{save_response_to_file = Srtf
         {error, Reason} ->
             {error, {file_write_error, Reason}}
     end;
-%% accumulate_response(<<>>, #state{cur_req = #request{caller_controls_socket = Ccs},
-%%                                  socket = Socket} = State) ->
-%%     case Ccs of
-%%         true ->
-%%             do_setopts(Socket, [{active, once}], State);
-%%         false ->
-%%             ok
-%%     end,
-%%     State;
 accumulate_response(Data, #state{reply_buffer      = RepBuf,
                                  rep_buf_size      = RepBufSize,
                                  streamed_size     = Streamed_size,
@@ -544,7 +535,7 @@ do_send_body1(Source, Resp, State, TE) ->
 maybe_chunked_encode(Data, false) ->
     Data;
 maybe_chunked_encode(Data, true) ->
-    [ibrowse_lib:dec2hex(4, size(to_binary(Data))), "\r\n", Data, "\r\n"].
+    [?dec2hex(size(to_binary(Data))), "\r\n", Data, "\r\n"].
 
 do_close(#state{socket = undefined})            ->  ok;
 do_close(#state{socket = Sock,
@@ -830,13 +821,14 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options,
     Headers_0 = [Fun1(X) || X <- Headers],
     Headers_1 =
         case lists:keysearch("content-length", 1, Headers_0) of
-            false when (Body == [] orelse Body == <<>>) andalso
-                       (Method == post orelse Method == put) ->
+            false when (Body =:= [] orelse Body =:= <<>>) andalso
+                       (Method =:= post orelse Method =:= put) ->
                 [{"content-length", "Content-Length", "0"} | Headers_0];
             false when is_binary(Body) orelse is_list(Body) ->
                 [{"content-length", "Content-Length", integer_to_list(iolist_size(Body))} | Headers_0];
             _ ->
-                %% Content-Length is already specified or Body is a function or function/state pair
+                %% Content-Length is already specified or Body is a
+                %% function or function/state pair
                 Headers_0
         end,
     {Headers_2, Body_1} =
@@ -922,23 +914,23 @@ chunk_request_body(Body, _ChunkSize, Acc) when Body == <<>>; Body == [] ->
 chunk_request_body(Body, ChunkSize, Acc) when is_binary(Body),
                                               size(Body) >= ChunkSize ->
     <<ChunkBody:ChunkSize/binary, Rest/binary>> = Body,
-    Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
+    Chunk = [?dec2hex(ChunkSize),"\r\n",
              ChunkBody, "\r\n"],
     chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
 chunk_request_body(Body, _ChunkSize, Acc) when is_binary(Body) ->
     BodySize = size(Body),
-    Chunk = [ibrowse_lib:dec2hex(4, BodySize),"\r\n",
+    Chunk = [?dec2hex(BodySize),"\r\n",
              Body, "\r\n"],
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk, Chunk | Acc]);
 chunk_request_body(Body, ChunkSize, Acc) when length(Body) >= ChunkSize ->
     {ChunkBody, Rest} = split_list_at(Body, ChunkSize),
-    Chunk = [ibrowse_lib:dec2hex(4, ChunkSize),"\r\n",
+    Chunk = [?dec2hex(ChunkSize),"\r\n",
              ChunkBody, "\r\n"],
     chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
 chunk_request_body(Body, _ChunkSize, Acc) when is_list(Body) ->
     BodySize = length(Body),
-    Chunk = [ibrowse_lib:dec2hex(4, BodySize),"\r\n",
+    Chunk = [?dec2hex(BodySize),"\r\n",
              Body, "\r\n"],
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk, Chunk | Acc]).

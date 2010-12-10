@@ -19,9 +19,6 @@
          url_encode/1,
          decode_rfc822_date/1,
          status_code/1,
-         dec2hex/2,
-         drv_ue/1,
-         drv_ue/2,
          encode_base64/1,
          decode_base64/1,
          get_value/2,
@@ -32,17 +29,6 @@
 
 get_trace_status(Host, Port) ->
     ibrowse:get_config_value({trace, Host, Port}, false).
-
-drv_ue(Str) ->
-    [{port, Port}| _] = ets:lookup(ibrowse_table, port),
-    drv_ue(Str, Port).
-drv_ue(Str, Port) ->
-    case erlang:port_control(Port, 1, Str) of
-        [] ->
-            Str;
-        Res ->
-            Res
-    end.
 
 %% @doc URL-encodes a string based on RFC 1738. Returns a flat list.
 %% @spec url_encode(Str) -> UrlEncodedStr
@@ -162,15 +148,6 @@ status_code(505) -> http_version_not_supported;
 status_code(507) -> insufficient_storage;
 status_code(X) when is_list(X) -> status_code(list_to_integer(X));
 status_code(_)   -> unknown_status_code.
-
-%% @doc dec2hex taken from gtk.erl in std dist
-%% M = integer() -- number of hex digits required
-%% N = integer() -- the number to represent as hex
-%% @spec dec2hex(M::integer(), N::integer()) -> string()
-dec2hex(M,N) -> dec2hex(M,N,[]).
-
-dec2hex(0,_N,Ack) -> Ack;
-dec2hex(M,N,Ack) -> dec2hex(M-1,N bsr 4,[d2h(N band 15)|Ack]).
 
 %% @doc Implements the base64 encoding algorithm. The output data type matches in the input data type.
 %% @spec encode_base64(In) -> Out
