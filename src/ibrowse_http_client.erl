@@ -197,7 +197,7 @@ handle_info({stream_close, _Req_id}, State) ->
     shutting_down(State),
     do_close(State),
     do_error_reply(State, closing_on_request),
-    {stop, normal, ok, State};
+    {stop, normal, State};
 
 handle_info({tcp_closed, _Sock}, State) ->    
     do_trace("TCP connection closed by peer!~n", []),
