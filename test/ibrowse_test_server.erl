@@ -11,10 +11,13 @@
 
 -record(request, {method, uri, version, headers = [], body = []}).
 
+-define(dec2hex(X), erlang:integer_to_list(X, 16)).
+
 start_server(Port, Sock_type) ->
     Fun = fun() ->
                   register(server_proc_name(Port), self()),
                   case do_listen(Sock_type, Port, [{active, false},
+                                                   {nodelay, true},
                                                    {packet, http}]) of
                       {ok, Sock} ->
                           do_trace("Server listening on port: ~p~n", [Port]),
@@ -88,6 +91,9 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
         {setopts, Opts} ->
             setopts(Sock, Sock_type, Opts),
             server_loop(Sock, Sock_type, Req);
+        {tcp_closed, Sock} ->
+            do_trace("Client closed connection~n", []),
+            ok;
         Other ->
             do_trace("Recvd unknown msg: ~p~n", [Other]),
             exit({unknown_msg, Other})
@@ -97,8 +103,34 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
     end.
 
 do_trace(Fmt, Args) ->
-    io:format("~s -- " ++ Fmt, [ibrowse_lib:printable_date() | Args]).
+    do_trace(get(my_trace_flag), Fmt, Args).
 
+do_trace(true, Fmt, Args) ->
+    io:format("~s -- " ++ Fmt, [ibrowse_lib:printable_date() | Args]);
+do_trace(_, _, _) ->
+    ok.
+
+process_request(Sock, Sock_type,
+                #request{method='GET',
+                         headers = Headers,
+                         uri = {abs_path, "/ibrowse_stream_once_chunk_pipeline_test"}} = Req) ->
+    Req_id = case lists:keysearch("X-Ibrowse-Request-Id", 3, Headers) of
+                 false ->
+                     "";
+                 {value, {http_header, _, _, _, Req_id_1}} ->
+                     Req_id_1
+             end,
+    Req_id_header = ["x-ibrowse-request-id: ", Req_id, "\r\n"],
+    do_trace("Recvd req: ~p~n", [Req]),
+    Body = string:join([integer_to_list(X) || X <- lists:seq(1,100)], "-"),
+    Chunked_body = chunk_request_body(Body, 50),
+    Resp_1 = [<<"HTTP/1.1 200 OK\r\n">>,
+              Req_id_header,
+              <<"Transfer-Encoding: chunked\r\n\r\n">>],
+    Resp_2 = Chunked_body,
+    do_send(Sock, Sock_type, Resp_1),
+    timer:sleep(100),
+    do_send(Sock, Sock_type, Resp_2);
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
@@ -108,3 +140,52 @@ do_send(Sock, tcp, Resp) ->
     ok = gen_tcp:send(Sock, Resp);
 do_send(Sock, ssl, Resp) ->
     ok = ssl:send(Sock, Resp).
+
+
+%%------------------------------------------------------------------------------
+%% Utility functions
+%%------------------------------------------------------------------------------
+
+chunk_request_body(Body, _ChunkSize) when is_tuple(Body) orelse
+                                          is_function(Body) ->
+    Body;
+chunk_request_body(Body, ChunkSize) ->
+    chunk_request_body(Body, ChunkSize, []).
+
+chunk_request_body(Body, _ChunkSize, Acc) when Body == <<>>; Body == [] ->
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk | Acc]);
+chunk_request_body(Body, ChunkSize, Acc) when is_binary(Body),
+                                              size(Body) >= ChunkSize ->
+    <<ChunkBody:ChunkSize/binary, Rest/binary>> = Body,
+    Chunk = [?dec2hex(ChunkSize),"\r\n",
+             ChunkBody, "\r\n"],
+    chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
+chunk_request_body(Body, _ChunkSize, Acc) when is_binary(Body) ->
+    BodySize = size(Body),
+    Chunk = [?dec2hex(BodySize),"\r\n",
+             Body, "\r\n"],
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk, Chunk | Acc]);
+chunk_request_body(Body, ChunkSize, Acc) when length(Body) >= ChunkSize ->
+    {ChunkBody, Rest} = split_list_at(Body, ChunkSize),
+    Chunk = [?dec2hex(ChunkSize),"\r\n",
+             ChunkBody, "\r\n"],
+    chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
+chunk_request_body(Body, _ChunkSize, Acc) when is_list(Body) ->
+    BodySize = length(Body),
+    Chunk = [?dec2hex(BodySize),"\r\n",
+             Body, "\r\n"],
+    LastChunk = "0\r\n",
+    lists:reverse(["\r\n", LastChunk, Chunk | Acc]).
+
+split_list_at(List, N) ->
+    split_list_at(List, N, []).
+
+split_list_at([], _, Acc) ->
+    {lists:reverse(Acc), []};
+split_list_at(List2, 0, List1) ->
+    {lists:reverse(List1), List2};
+split_list_at([H | List2], N, List1) ->
+    split_list_at(List2, N-1, [H | List1]).
+

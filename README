@@ -18,7 +18,7 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 2.1.1
+Version : 2.1.2
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
@@ -60,6 +60,11 @@ tholschuh (https://github.com/tholschuh/)
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+20-12-2010 - v2.1.2
+             * Pipelining wasn't working when used in conjunction with the
+               {stream_to, {self(), once}} option. Bug report by
+               Filipe David Manana.
+
 10-12-2010 - v2.1.1
              * Fix for https://github.com/cmullaparthi/ibrowse/issues/issue/20 
                by Filipe David Manana
