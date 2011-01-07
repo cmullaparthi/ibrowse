@@ -543,7 +543,7 @@ do_send_body1(Source, Resp, State, TE) ->
 maybe_chunked_encode(Data, false) ->
     Data;
 maybe_chunked_encode(Data, true) ->
-    [?dec2hex(size(to_binary(Data))), "\r\n", Data, "\r\n"].
+    [?dec2hex(iolist_size(Data)), "\r\n", Data, "\r\n"].
 
 do_close(#state{socket = undefined})            ->  ok;
 do_close(#state{socket = Sock,
