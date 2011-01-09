@@ -188,7 +188,7 @@ handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
     %% io:format("Client process set {active, once}~n", []),
     do_setopts(Socket, [{active, once}], State),
-    {noreply, State};
+    {noreply, set_inac_timer(State)};
 
 handle_info({stream_next, _Req_id}, State) ->
     _Cur_req_id = case State#state.cur_req of
