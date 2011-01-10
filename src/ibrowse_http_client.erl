@@ -335,7 +335,7 @@ handle_sock_data(Data, #state{status           = get_body,
                         cancel_timer(State_2#state.inactivity_timer_ref, {eat_message, timeout}),
                         {noreply, State_2#state{inactivity_timer_ref = undefined}};
                     _ ->
-                        {no_reply, set_inac_timer(State_2)}
+                        {noreply, set_inac_timer(State_2)}
                     end;
                 State_1 ->
                     active_once(State_1),
