@@ -683,6 +683,7 @@ send_req_1(From,
            Headers, Method, Body, Options, Timeout,
            #state{status    = Status,
                   socket    = Socket} = State) ->
+    cancel_timer(State#state.inactivity_timer_ref, {eat_message, timeout}),
     ReqId = make_req_id(),
     Resp_format = get_value(response_format, Options, list),
     Caller_socket_options = get_value(socket_options, Options, []),
