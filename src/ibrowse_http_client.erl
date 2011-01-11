@@ -482,17 +482,19 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
                                        use_proxy   = false,
                                        ssl_options = SSLOptions},
            Timeout) ->
+    ssl:connect(Host, Port, get_sock_options(Options, SSLOptions), Timeout);
+do_connect(Host, Port, Options, _State, Timeout) ->
+    gen_tcp:connect(Host, Port, get_sock_options(Options, []), Timeout).
+
+get_sock_options(Options, SSLOptions) ->
     Caller_socket_options = get_value(socket_options, Options, []),
     Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options),
-    ssl:connect(Host, Port,
-                [binary, {nodelay, true}, {active, false} | Other_sock_options],
-                Timeout);
-do_connect(Host, Port, Options, _State, Timeout) ->
-    Caller_socket_options = get_value(socket_options, Options, []),
-    Other_sock_options = filter_sock_options(Caller_socket_options),
-    gen_tcp:connect(Host, to_integer(Port),
-                    [binary, {nodelay, true}, {active, false} | Other_sock_options],
-                    Timeout).
+    case lists:keysearch(nodelay, 1, Other_sock_options) of
+        false ->
+            [{nodelay, true}, binary, {active, false} | Other_sock_options];
+        {value, _} ->
+            [binary, {active, false} | Other_sock_options]
+    end.
 
 %% We don't want the caller to specify certain options
 filter_sock_options(Opts) ->
@@ -1813,9 +1815,6 @@ trace_request_body(Body) ->
         false ->
             ok
     end.
-
-to_integer(X) when is_list(X)    -> list_to_integer(X); 
-to_integer(X) when is_integer(X) -> X.
 
 to_binary(X) when is_list(X)   -> list_to_binary(X); 
 to_binary(X) when is_binary(X) -> X.
