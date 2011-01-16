@@ -188,7 +188,7 @@ handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
     %% io:format("Client process set {active, once}~n", []),
     do_setopts(Socket, [{active, once}], State),
-    {noreply, State};
+    {noreply, set_inac_timer(State)};
 
 handle_info({stream_next, _Req_id}, State) ->
     _Cur_req_id = case State#state.cur_req of
@@ -334,8 +334,13 @@ handle_sock_data(Data, #state{status           = get_body,
                             active_once(State_1)
                     end,
                     State_2 = State_1#state{interim_reply_sent = false},
-                    State_3 = set_inac_timer(State_2),
-                    {noreply, State_3};
+                    case Ccs of
+                    true ->
+                        cancel_timer(State_2#state.inactivity_timer_ref, {eat_message, timeout}),
+                        {noreply, State_2#state{inactivity_timer_ref = undefined}};
+                    _ ->
+                        {noreply, set_inac_timer(State_2)}
+                    end;
                 State_1 ->
                     active_once(State_1),
                     State_2 = set_inac_timer(State_1),
