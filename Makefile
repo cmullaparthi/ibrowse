@@ -1,10 +1,10 @@
-include vsn.mk
+IBROWSE_VSN = $(shell sed -n 's/.*{vsn,.*"\(.*\)"}.*/\1/p' src/ibrowse.app.src)
 
 all:
-	(cd src ; make)
+	./rebar compile
 
 clean:
-	(cd src ; make clean)
+	./rebar clean
 
 install: all
 	mkdir -p $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
