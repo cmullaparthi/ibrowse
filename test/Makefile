@@ -1,5 +1,3 @@
-include ../vsn.mk
-
 ERL_FILES = ibrowse_test_server.erl
 
 
