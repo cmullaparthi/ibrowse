@@ -18,7 +18,7 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 2.1.2
+Version : 2.1.3
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
@@ -56,10 +56,27 @@ Seth Falcon
 Steve Vinoski
 Thomas Lindgren
 Younès Hafri
+fholzhauser (https://github.com/fholzhauser/)
 tholschuh (https://github.com/tholschuh/)
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+16-01-2011 - v2.1.3
+             * Fixed issues with streaming and chunked responses when using
+               the 'caller controls socket' feature. See following links for
+               details. Contributed by Filipe David Manana.
+               https://github.com/cmullaparthi/ibrowse/pull/24
+               https://github.com/cmullaparthi/ibrowse/pull/25
+               https://github.com/cmullaparthi/ibrowse/pull/27
+               https://github.com/cmullaparthi/ibrowse/pull/28
+               https://github.com/cmullaparthi/ibrowse/pull/29
+
+             * Fix for issue 32 reported by fholzhauser
+               https://github.com/cmullaparthi/ibrowse/issues#issue/32
+
+             * Fixed some dialyzer warnings. Thanks to Kostis for reporting
+               them.
+
 20-12-2010 - v2.1.2
              * Pipelining wasn't working when used in conjunction with the
                {stream_to, {self(), once}} option. Bug report by

@@ -216,12 +216,14 @@ handle_info({ssl_closed, _Sock}, State) ->
     handle_sock_closed(State),
     {stop, normal, State};
 
-handle_info({tcp_error, _Sock}, State) ->
-    do_trace("Error on connection to ~1000.p:~1000.p~n", [State#state.host, State#state.port]),
+handle_info({tcp_error, _Sock, Reason}, State) ->
+    do_trace("Error on connection to ~1000.p:~1000.p -> ~1000.p~n",
+             [State#state.host, State#state.port, Reason]),
     handle_sock_closed(State),
     {stop, normal, State};
-handle_info({ssl_error, _Sock}, State) ->
-    do_trace("Error on SSL connection to ~1000.p:~1000.p~n", [State#state.host, State#state.port]),
+handle_info({ssl_error, _Sock, Reason}, State) ->
+    do_trace("Error on SSL connection to ~1000.p:~1000.p -> ~1000.p~n",
+             [State#state.host, State#state.port, Reason]),
     handle_sock_closed(State),
     {stop, normal, State};
 
@@ -466,7 +468,7 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
                        undefined ->
                            Buf;
                        _ ->
-                           file:close(Fd),
+                           ok = file:close(Fd),
                            {file, TmpFilename}
                    end,
             Reply = case get_value(give_raw_headers, Options, false) of
@@ -475,11 +477,11 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
                         false ->
                             {ok, SC, Headers, Buf}
                     end,
-            do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
-            do_error_reply(State#state{reqs = Reqs_1}, connection_closed),
-            State;
+            State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
+            ok = do_error_reply(State_1#state{reqs = Reqs_1}, connection_closed),
+            State_1;
         _ ->
-            do_error_reply(State, connection_closed),
+            ok = do_error_reply(State, connection_closed),
             State
     end.
 
@@ -1276,7 +1278,7 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                        reply_buffer  = RepBuf,
                        recvd_headers = RespHeaders}=State) when SaveResponseToFile /= false ->
     Body = RepBuf,
-    file:close(Fd),
+    ok = file:close(Fd),
     ResponseBody = case TmpFilename of
                        undefined ->
                            Body;
@@ -1663,8 +1665,8 @@ fail_pipelined_requests(#state{reqs = Reqs, cur_req = CurReq} = State, Reply) ->
     {_, Reqs_1} = queue:out(Reqs),
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
              response_format = Resp_format} = CurReq,
-    do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
-    do_error_reply(State#state{reqs = Reqs_1}, previous_request_failed).
+    State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
+    do_error_reply(State_1#state{reqs = Reqs_1}, previous_request_failed).
 
 split_list_at(List, N) ->
     split_list_at(List, N, []).
@@ -1708,7 +1710,8 @@ to_ascii($9) -> 9;
 to_ascii($0) -> 0.
 
 cancel_timer(undefined) -> ok;
-cancel_timer(Ref)       -> erlang:cancel_timer(Ref).
+cancel_timer(Ref)       -> _ = erlang:cancel_timer(Ref),
+                           ok.
 
 cancel_timer(Ref, {eat_message, Msg}) ->
     cancel_timer(Ref),
