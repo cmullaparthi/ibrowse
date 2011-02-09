@@ -1278,7 +1278,12 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                        reply_buffer  = RepBuf,
                        recvd_headers = RespHeaders}=State) when SaveResponseToFile /= false ->
     Body = RepBuf,
-    ok = file:close(Fd),
+    case Fd of
+        undefined -> 
+            ok;
+        _ -> 
+            ok = file:close(Fd)
+    end,
     ResponseBody = case TmpFilename of
                        undefined ->
                            Body;
