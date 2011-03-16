@@ -35,6 +35,7 @@
         ]).
 
 -include("ibrowse.hrl").
+-include_lib("kernel/include/inet.hrl").
 
 -record(state, {host, port, connect_timeout,
                 inactivity_timer_ref,
@@ -489,13 +490,19 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
                                        use_proxy   = false,
                                        ssl_options = SSLOptions},
            Timeout) ->
-    ssl:connect(Host, Port, get_sock_options(Options, SSLOptions), Timeout);
+    ssl:connect(Host, Port, get_sock_options(Host, Options, SSLOptions), Timeout);
 do_connect(Host, Port, Options, _State, Timeout) ->
-    gen_tcp:connect(Host, Port, get_sock_options(Options, []), Timeout).
+    gen_tcp:connect(Host, Port, get_sock_options(Host, Options, []), Timeout).
 
-get_sock_options(Options, SSLOptions) ->
+get_sock_options(Host, Options, SSLOptions) ->
     Caller_socket_options = get_value(socket_options, Options, []),
-    Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options),
+    Ipv6Options = case inet:gethostbyname(Host) of
+        {ok, #hostent{h_addrtype = inet6}} ->
+            [inet6];
+        _ ->
+            []
+    end,
+    Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options ++ Ipv6Options),
     case lists:keysearch(nodelay, 1, Other_sock_options) of
         false ->
             [{nodelay, true}, binary, {active, false} | Other_sock_options];
