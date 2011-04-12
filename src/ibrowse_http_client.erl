@@ -496,10 +496,10 @@ do_connect(Host, Port, Options, _State, Timeout) ->
 
 get_sock_options(Host, Options, SSLOptions) ->
     Caller_socket_options = get_value(socket_options, Options, []),
-    Ipv6Options = case inet:gethostbyname(Host) of
-        {ok, #hostent{h_addrtype = inet6}} ->
+    Ipv6Options = case is_ipv6_host(Host) of
+        true ->
             [inet6];
-        _ ->
+        false ->
             []
     end,
     Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options ++ Ipv6Options),
@@ -508,6 +508,21 @@ get_sock_options(Host, Options, SSLOptions) ->
             [{nodelay, true}, binary, {active, false} | Other_sock_options];
         {value, _} ->
             [binary, {active, false} | Other_sock_options]
+    end.
+
+is_ipv6_host(Host) ->
+    case inet_parse:address(Host) of
+        {ok, {_, _, _, _, _, _, _, _}} ->
+            true;
+        {ok, {_, _, _, _}} ->
+            false;
+        _  ->
+            case inet:gethostbyname(Host) of
+                {ok, #hostent{h_addrtype = inet6}} ->
+                    true;
+                _ ->
+                    false
+            end
     end.
 
 %% We don't want the caller to specify certain options
