@@ -11,6 +11,7 @@ install: all
 	cp -r ebin $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 
 test: all
+	./rebar eunit
 	(cd test; make) 
 	erl -noshell -pa ebin -pa test -s ibrowse -s ibrowse_test unit_tests \
 	-s ibrowse_test verify_chunked_streaming \
