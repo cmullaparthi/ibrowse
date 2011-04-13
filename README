@@ -18,7 +18,7 @@ ibrowse is available under two different licenses. LGPL or the BSD license.
 
 Comments to : Chandrashekhar.Mullaparthi@gmail.com
 
-Version : 2.1.4
+Version : 2.2.0
 
 Latest version : git://github.com/cmullaparthi/ibrowse.git
 
@@ -43,6 +43,7 @@ Filipe David Manana
 Geoff Cant
 Jeroen Koops
 João Lopes
+Joseph Wayne Norton
 Karol Skocik
 Kostis Sagonas
 Matthew Reilly
@@ -62,6 +63,11 @@ tholschuh (https://github.com/tholschuh/)
 
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+13-04-2011 - v2.2.0
+             * Filipe David Manana added IPv6 support. This is a mjor new 
+               feature, Thank you Filipe!
+             * Joseph Wayne Norton contributed tweaks to .gitignore
+
 09-02-2011 - v2.1.4
              * Fixed a bug reported by Ryan Zezeski with the
                save_response_to_file option.
