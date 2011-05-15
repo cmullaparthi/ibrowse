@@ -1366,10 +1366,10 @@ reset_state(State) ->
                }.
 
 set_cur_request(#state{reqs = Reqs, socket = Socket} = State) ->
-    case queue:to_list(Reqs) of
-        [] ->
+    case queue:peek(Reqs) of
+        empty ->
             State#state{cur_req = undefined};
-        [#request{caller_controls_socket = Ccs} = NextReq | _] ->
+        {value, #request{caller_controls_socket = Ccs} = NextReq} ->
             case Ccs of
                 true ->
                     do_setopts(Socket, [{active, once}], State);
