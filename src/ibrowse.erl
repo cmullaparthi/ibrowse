@@ -286,7 +286,7 @@ send_req(Url, Headers, Method, Body) ->
 %% Sock_opts = [Sock_opt]
 %% Sock_opt = term()
 %% ChunkSize = integer()
-%% srtf() = boolean() | filename()
+%% srtf() = boolean() | filename() | {append, filename()}
 %% filename() = string()
 %% response_format() = list | binary
 send_req(Url, Headers, Method, Body, Options) ->

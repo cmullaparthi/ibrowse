@@ -357,7 +357,8 @@ accumulate_response(Data,
                                          tmp_file_fd = undefined} = CurReq,
                       http_status_code=[$2 | _]}=State) when Srtf /= false ->
     TmpFilename = make_tmp_filename(Srtf),
-    case file:open(TmpFilename, [write, delayed_write, raw]) of
+    Mode = file_mode(Srtf),
+    case file:open(TmpFilename, [Mode, delayed_write, raw]) of
         {ok, Fd} ->
             accumulate_response(Data, State#state{
                                         cur_req = CurReq#request{
@@ -434,7 +435,12 @@ make_tmp_filename(true) ->
                    integer_to_list(B) ++
                    integer_to_list(C)]);
 make_tmp_filename(File) when is_list(File) ->
+    File;
+make_tmp_filename({append, File}) when is_list(File) ->
     File.
+
+file_mode({append, _File}) -> append;
+file_mode(_Srtf) -> write.
 
 
 %%--------------------------------------------------------------------
@@ -1361,10 +1367,10 @@ reset_state(State) ->
                }.
 
 set_cur_request(#state{reqs = Reqs, socket = Socket} = State) ->
-    case queue:to_list(Reqs) of
-        [] ->
+    case queue:peek(Reqs) of
+        empty ->
             State#state{cur_req = undefined};
-        [#request{caller_controls_socket = Ccs} = NextReq | _] ->
+        {value, #request{caller_controls_socket = Ccs} = NextReq} ->
             case Ccs of
                 true ->
                     do_setopts(Socket, [{active, once}], State);
