@@ -425,6 +425,8 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
             {error, req_timedout};
         {'EXIT', {noproc, {gen_server, call, [Conn_Pid, _, _]}}} ->
             {error, sel_conn_closed};
+        {'EXIT', {normal, _}} ->
+            {error, req_timedout};
         {error, connection_closed} ->
             {error, sel_conn_closed};
         {'EXIT', Reason} ->

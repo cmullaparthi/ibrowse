@@ -135,15 +135,24 @@ process_request(Sock, Sock_type,
     do_send(Sock, Sock_type, Resp_1),
     timer:sleep(100),
     do_send(Sock, Sock_type, Resp_2);
+process_request(Sock, Sock_type,
+                #request{method='GET',
+                         headers = _Headers,
+                         uri = {abs_path, "/ibrowse_inac_timeout_test"}} = Req) ->
+    do_trace("Recvd req: ~p. Sleeping for 30 secs...~n", [Req]),
+    timer:sleep(30000),
+    do_trace("...Sending response now.~n", []),
+    Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
+    do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp).
 
 do_send(Sock, tcp, Resp) ->
-    ok = gen_tcp:send(Sock, Resp);
+    gen_tcp:send(Sock, Resp);
 do_send(Sock, ssl, Resp) ->
-    ok = ssl:send(Sock, Resp).
+    ssl:send(Sock, Resp).
 
 
 %%------------------------------------------------------------------------------

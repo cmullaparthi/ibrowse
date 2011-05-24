@@ -20,7 +20,10 @@
 	 test_stream_once/3,
 	 test_stream_once/4,
          test_20122010/0,
-         test_20122010/1
+         test_20122010/1,
+         test_pipeline_head_timeout/0,
+         test_pipeline_head_timeout/1,
+         do_test_pipeline_head_timeout/4
 	]).
 
 test_stream_once(Url, Method, Options) ->
@@ -219,7 +222,8 @@ dump_errors(Key, Iod) ->
 		    {"http://jigsaw.w3.org/HTTP/CL/", get},
 		    {"http://www.httpwatch.com/httpgallery/chunked/", get},
                     {"https://github.com", get, [{ssl_options, [{depth, 2}]}]},
-                    {local_test_fun, test_20122010, []}
+                    {local_test_fun, test_20122010, []},
+                    {local_test_fun, test_pipeline_head_timeout, []}
 		   ]).
 
 unit_tests() ->
@@ -425,6 +429,68 @@ log_msg(Fmt, Args) ->
     io:format("~s -- " ++ Fmt,
 	      [ibrowse_lib:printable_date() | Args]).
 
+
+%%------------------------------------------------------------------------------
+%% Test what happens when the request at the head of a pipeline times out
+%%------------------------------------------------------------------------------
+test_pipeline_head_timeout() ->
+    clear_msg_q(),
+    test_pipeline_head_timeout("http://localhost:8181/ibrowse_inac_timeout_test").
+
+test_pipeline_head_timeout(Url) ->
+    {ok, Pid} = ibrowse:spawn_worker_process(Url),
+    Test_parent = self(),
+    Fun = fun({fixed, Timeout}) ->
+                  spawn(fun() ->
+                                do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
+                        end);
+             (Timeout_mult) ->
+                  spawn(fun() ->
+                                Timeout = 1000 + Timeout_mult*1000,
+                                do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
+                        end)
+          end,
+    Pids = [Fun(X) || X <- [{fixed, 32000} | lists:seq(1,10)]],
+    Result = accumulate_worker_resp(Pids),
+    case lists:all(fun({_, X_res}) ->
+                           X_res == {error,req_timedout}
+                   end, Result) of
+        true ->
+            success;
+        false ->
+            {test_failed, Result}
+    end.
+
+do_test_pipeline_head_timeout(Url, Pid, Test_parent, Req_timeout) ->
+    Resp = ibrowse:send_req_direct(
+                                 Pid,
+                                 Url,
+                                 [], get, [],
+                                 [{socket_options,[{keepalive,true}]},
+                                  {inactivity_timeout,180000},
+                                  {connect_timeout,180000}], Req_timeout),
+    Test_parent ! {self(), Resp}.
+
+accumulate_worker_resp(Pids) ->
+    accumulate_worker_resp(Pids, []).
+
+accumulate_worker_resp([_ | _] = Pids, Acc) ->
+    receive
+        {Pid, Res} when is_pid(Pid) ->
+            accumulate_worker_resp(Pids -- [Pid], [{Pid, Res} | Acc]);
+        Err ->
+            io:format("Received unexpected: ~p~n", [Err])
+    end;
+accumulate_worker_resp([], Acc) ->
+    lists:reverse(Acc).
+
+clear_msg_q() ->
+    receive
+        _ ->
+            clear_msg_q()
+    after 0 ->
+            ok
+    end.
 %%------------------------------------------------------------------------------
 %% 
 %%------------------------------------------------------------------------------
