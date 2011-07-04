@@ -1,6 +1,6 @@
 {application, ibrowse,
         [{description, "HTTP client application"},
-         {vsn, "2.1.3"},
+         {vsn, git},
          {modules, [ ibrowse, 
 		     ibrowse_http_client, 
 		     ibrowse_app, 
