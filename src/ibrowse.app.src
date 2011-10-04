@@ -8,6 +8,6 @@
 		     ibrowse_lib,
 		     ibrowse_lb ]},
          {registered, []},
-         {applications, [kernel,stdlib,sasl]},
+         {applications, [kernel,stdlib]},
 	 {env, []},
 	 {mod, {ibrowse_app, []}}]}.
