@@ -70,6 +70,7 @@
 -export([
          rescan_config/0,
          rescan_config/1,
+         add_config/1,
          get_config_value/1,
          get_config_value/2,
          spawn_worker_process/1,
@@ -664,8 +665,14 @@ rescan_config() ->
 %% Clear current configuration for ibrowse and load from the specified
 %% file. Current configuration is cleared only if the specified
 %% file is readable using file:consult/1
+rescan_config([{_,_}|_]=Terms) ->
+    gen_server:call(?MODULE, {rescan_config_terms, Terms});
 rescan_config(File) when is_list(File) ->
     gen_server:call(?MODULE, {rescan_config, File}).
+
+%% @doc Add additional configuration elements at runtime.
+add_config([{_,_}|_]=Terms) ->
+    gen_server:call(?MODULE, {add_config_terms, Terms}).
 
 %%====================================================================
 %% Server functions
@@ -702,31 +709,37 @@ import_config() ->
 import_config(Filename) ->
     case file:consult(Filename) of
         {ok, Terms} ->
-            ets:delete_all_objects(ibrowse_conf),
-            Fun = fun({dest, Host, Port, MaxSess, MaxPipe, Options}) 
-                     when is_list(Host), is_integer(Port),
-                          is_integer(MaxSess), MaxSess > 0,
-                          is_integer(MaxPipe), MaxPipe > 0, is_list(Options) ->
-                          I = [{{max_sessions, Host, Port}, MaxSess},
-                               {{max_pipeline_size, Host, Port}, MaxPipe},
-                               {{options, Host, Port}, Options}],
-                          lists:foreach(
-                            fun({X, Y}) ->
-                                    ets:insert(ibrowse_conf,
-                                               #ibrowse_conf{key = X, 
-                                                             value = Y})
-                            end, I);
-                     ({K, V}) ->
-                          ets:insert(ibrowse_conf,
-                                     #ibrowse_conf{key = K,
-                                                   value = V});
-                     (X) ->
-                          io:format("Skipping unrecognised term: ~p~n", [X])
-                  end,
-            lists:foreach(Fun, Terms);
+            apply_config(Terms);
         _Err ->
             ok
     end.
+
+apply_config(Terms) ->
+    ets:delete_all_objects(ibrowse_conf),
+    insert_config(Terms).
+
+insert_config(Terms) ->
+    Fun = fun({dest, Host, Port, MaxSess, MaxPipe, Options}) 
+             when is_list(Host), is_integer(Port),
+                  is_integer(MaxSess), MaxSess > 0,
+                  is_integer(MaxPipe), MaxPipe > 0, is_list(Options) ->
+                  I = [{{max_sessions, Host, Port}, MaxSess},
+                       {{max_pipeline_size, Host, Port}, MaxPipe},
+                       {{options, Host, Port}, Options}],
+                  lists:foreach(
+                    fun({X, Y}) ->
+                            ets:insert(ibrowse_conf,
+                                       #ibrowse_conf{key = X, 
+                                                     value = Y})
+                    end, I);
+             ({K, V}) ->
+                  ets:insert(ibrowse_conf,
+                             #ibrowse_conf{key = K,
+                                           value = V});
+             (X) ->
+                  io:format("Skipping unrecognised term: ~p~n", [X])
+          end,
+    lists:foreach(Fun, Terms).
 
 %% @doc Internal export
 get_config_value(Key) ->
@@ -776,6 +789,14 @@ handle_call(rescan_config, _From, State) ->
 
 handle_call({rescan_config, File}, _From, State) ->
     Ret = (catch import_config(File)),
+    {reply, Ret, State};
+
+handle_call({rescan_config_terms, Terms}, _From, State) ->
+    Ret = (catch apply_config(Terms)),
+    {reply, Ret, State};
+
+handle_call({add_config_terms, Terms}, _From, State) ->
+    Ret = (catch insert_config(Terms)),
     {reply, Ret, State};
 
 handle_call(Request, _From, State) ->
