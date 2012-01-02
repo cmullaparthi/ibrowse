@@ -1,4 +1,4 @@
-# ibrowse
+# ibrowse [![Build Status](https://secure.travis-ci.org/johannesh/ibrowse.png)](http://travis-ci.org/johannesh/ibrowse)
 
 ibrowse is a HTTP client written in erlang.
 
