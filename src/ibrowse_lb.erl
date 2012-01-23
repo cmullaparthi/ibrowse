@@ -104,14 +104,6 @@ stop(Lb_pid) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-% handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _}, _From,
-% 	    #state{max_sessions = Max_sess,
-% 		   ets_tid = Tid,
-% 		   max_pipeline_size = Max_pipe_sz,
-% 		   num_cur_sessions = Num} = State) 
-%     when Num >= Max ->
-%     Reply = find_best_connection(Tid),
-%     {reply, sorry_dude_reuse, State};
 
 %% Update max_sessions in #state with supplied value
 handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _}, _From,
@@ -119,15 +111,18 @@ handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _}, _From,
     when Num >= Max_sess ->
     State_1 = maybe_create_ets(State),
     Reply = find_best_connection(State_1#state.ets_tid, Max_pipe),
-    {reply, Reply, State_1#state{max_sessions = Max_sess}};
+    {reply, Reply, State_1#state{max_sessions = Max_sess,
+                                 max_pipeline_size = Max_pipe}};
 
-handle_call({spawn_connection, Url, _Max_sess, _Max_pipe, SSL_options}, _From,
+handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options}, _From,
 	    #state{num_cur_sessions = Cur} = State) ->
     State_1 = maybe_create_ets(State),
     Tid = State_1#state.ets_tid,
     {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}),
-    ets:insert(Tid, {{1, Pid}, []}),
-    {reply, {ok, Pid}, State_1#state{num_cur_sessions = Cur + 1}};
+    ets:insert(Tid, {Pid, 0, 0}),
+    {reply, {ok, Pid}, State_1#state{num_cur_sessions = Cur + 1,
+                                     max_sessions = Max_sess,
+                                     max_pipeline_size = Max_pipe}};
 
 handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     gen_server:reply(_From, ok),
@@ -180,7 +175,7 @@ handle_info({'EXIT', Pid, _Reason},
 		  _ ->
 		      State
 	      end,
-    {noreply, State_1#state{num_cur_sessions = Cur_1}};
+    {noreply, State_1#state{num_cur_sessions = Cur_1}, 10000};
 
 handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
@@ -194,6 +189,9 @@ handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
 		      Acc
 	      end, undefined, Tid),
     put(my_trace_flag, Bool),
+    {noreply, State};
+
+handle_info(timeout, State) ->
     {noreply, State};
 
 handle_info(_Info, State) ->
@@ -219,17 +217,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 find_best_connection(Tid, Max_pipe) ->
-    case ets:first(Tid) of
-	{Cur_sz, Pid} when Cur_sz < Max_pipe ->
-	    ets:delete(Tid, {Cur_sz, Pid}),
-	    ets:insert(Tid, {{Cur_sz + 1, Pid}, []}),
-	    {ok, Pid};
-	_ ->
-	    {error, retry_later}
+    Res = find_best_connection(ets:first(Tid), Tid, Max_pipe),
+    Res.
+
+find_best_connection('$end_of_table', _, _) ->
+    {error, retry_later};
+find_best_connection(Pid, Tid, Max_pipe) ->
+    case ets:lookup(Tid, Pid) of
+        [{Pid, Cur_sz, Speculative_sz}] when Cur_sz < Max_pipe,
+                                             Speculative_sz < Max_pipe ->
+            ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}),
+            {ok, Pid};
+        _ ->
+            find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe)
     end.
 
 maybe_create_ets(#state{ets_tid = undefined} = State) ->
-    Tid = ets:new(ibrowse_lb, [public, ordered_set]),
+    Tid = ets:new(ibrowse_lb, [public, 
+                               {write_concurrency, true},
+                               {read_concurrency, true}]),
     State#state{ets_tid = Tid};
 maybe_create_ets(State) ->
     State.

@@ -179,7 +179,6 @@ handle_cast(_Msg, State) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
 handle_info({tcp, _Sock, Data}, #state{status = Status} = State) ->
-%%    io:format("Recvd data: ~p~n", [Data]),
     do_trace("Data recvd in state: ~p. Size: ~p. ~p~n~n", [Status, size(Data), Data]),
     handle_sock_data(Data, State);
 handle_info({ssl, _Sock, Data}, State) ->
@@ -187,7 +186,6 @@ handle_info({ssl, _Sock, Data}, State) ->
 
 handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
-    %% io:format("Client process set {active, once}~n", []),
     do_setopts(Socket, [{active, once}], State),
     {noreply, set_inac_timer(State)};
 
@@ -198,8 +196,6 @@ handle_info({stream_next, _Req_id}, State) ->
                      _ ->
                          undefined
                  end,
-%%     io:format("Ignoring stream_next as ~1000.p is not cur req (~1000.p)~n",
-%%               [_Req_id, _Cur_req_id]),
     {noreply, State};
 
 handle_info({stream_close, _Req_id}, State) ->
@@ -1417,7 +1413,19 @@ parse_headers_1([$\n, H |T], [$\r | L], Acc) when H =:= 32;
     parse_headers_1(lists:dropwhile(fun(X) ->
                                             is_whitespace(X)
                                     end, T), [32 | L], Acc);
+parse_headers_1([$\n, H |T], L, Acc) when H =:= 32;
+                                          H =:= $\t ->
+    parse_headers_1(lists:dropwhile(fun(X) ->
+                                            is_whitespace(X)
+                                    end, T), [32 | L], Acc);
 parse_headers_1([$\n|T], [$\r | L], Acc) ->
+    case parse_header(lists:reverse(L)) of
+        invalid ->
+            parse_headers_1(T, [], Acc);
+        NewHeader ->
+            parse_headers_1(T, [], [NewHeader | Acc])
+    end;
+parse_headers_1([$\n|T], L, Acc) ->
     case parse_header(lists:reverse(L)) of
         invalid ->
             parse_headers_1(T, [], Acc);
@@ -1469,6 +1477,9 @@ scan_header(Bin) ->
         {yes, Pos} ->
             {Headers, <<_:4/binary, Body/binary>>} = split_binary(Bin, Pos),
             {yes, Headers, Body};
+        {yes_dodgy, Pos} ->
+            {Headers, <<_:2/binary, Body/binary>>} = split_binary(Bin, Pos),
+            {yes, Headers, Body};
         no ->
             {no, Bin}
     end.
@@ -1485,18 +1496,22 @@ scan_header(Bin1, Bin2) ->
         {yes, Pos} ->
             {Headers_suffix, <<_:4/binary, Body/binary>>} = split_binary(Bin_to_scan, Pos),
             {yes, <<Headers_prefix/binary, Headers_suffix/binary>>, Body};
+        {yes_dodgy, Pos} ->
+            {Headers_suffix, <<_:2/binary, Body/binary>>} = split_binary(Bin_to_scan, Pos),
+            {yes, <<Headers_prefix/binary, Headers_suffix/binary>>, Body};
         no ->
             {no, <<Bin1/binary, Bin2/binary>>}
     end.
 
 get_crlf_crlf_pos(<<$\r, $\n, $\r, $\n, _/binary>>, Pos) -> {yes, Pos};
+get_crlf_crlf_pos(<<$\n, $\n, _/binary>>, Pos)           -> {yes_dodgy, Pos};
 get_crlf_crlf_pos(<<_, Rest/binary>>, Pos)               -> get_crlf_crlf_pos(Rest, Pos + 1);
 get_crlf_crlf_pos(<<>>, _)                               -> no.
 
 scan_crlf(Bin) ->
     case get_crlf_pos(Bin) of
-        {yes, Pos} ->
-            {Prefix, <<_, _, Suffix/binary>>} = split_binary(Bin, Pos),
+        {yes, Offset, Pos} ->
+            {Prefix, <<_:Offset/binary, Suffix/binary>>} = split_binary(Bin, Pos),
             {yes, Prefix, Suffix};
         no ->
             {no, Bin}
@@ -1513,8 +1528,8 @@ scan_crlf_1(Bin1_head_size, Bin1, Bin2) ->
     <<Bin1_head:Bin1_head_size/binary, Bin1_tail/binary>> = Bin1,
     Bin3 = <<Bin1_tail/binary, Bin2/binary>>,
     case get_crlf_pos(Bin3) of
-        {yes, Pos} ->
-            {Prefix, <<_, _, Suffix/binary>>} = split_binary(Bin3, Pos),
+        {yes, Offset, Pos} ->
+            {Prefix, <<_:Offset/binary, Suffix/binary>>} = split_binary(Bin3, Pos),
             {yes, list_to_binary([Bin1_head, Prefix]), Suffix};
         no ->
             {no, list_to_binary([Bin1, Bin2])}
@@ -1523,7 +1538,8 @@ scan_crlf_1(Bin1_head_size, Bin1, Bin2) ->
 get_crlf_pos(Bin) ->
     get_crlf_pos(Bin, 0).
 
-get_crlf_pos(<<$\r, $\n, _/binary>>, Pos) -> {yes, Pos};
+get_crlf_pos(<<$\r, $\n, _/binary>>, Pos) -> {yes, 2, Pos};
+get_crlf_pos(<<$\n, _/binary>>, Pos) ->      {yes, 1, Pos};
 get_crlf_pos(<<_, Rest/binary>>, Pos)     -> get_crlf_pos(Rest, Pos + 1);
 get_crlf_pos(<<>>, _)                     -> no.
 
@@ -1534,21 +1550,22 @@ fmt_val(Term)                 -> io_lib:format("~p", [Term]).
 
 crnl() -> "\r\n".
 
-method(get)       -> "GET";
-method(post)      -> "POST";
-method(head)      -> "HEAD";
-method(options)   -> "OPTIONS";
-method(put)       -> "PUT";
+method(connect)   -> "CONNECT";
+method(copy)      -> "COPY";
 method(delete)    -> "DELETE";
-method(trace)     -> "TRACE";
+method(get)       -> "GET";
+method(head)      -> "HEAD";
+method(lock)      -> "LOCK";
 method(mkcol)     -> "MKCOL";
+method(move)      -> "MOVE";
+method(options)   -> "OPTIONS";
+method(patch)     -> "PATCH";
+method(post)      -> "POST";
 method(propfind)  -> "PROPFIND";
 method(proppatch) -> "PROPPATCH";
-method(lock)      -> "LOCK";
-method(unlock)    -> "UNLOCK";
-method(move)      -> "MOVE";
-method(copy)      -> "COPY";
-method(connect)   -> "CONNECT".
+method(put)       -> "PUT";
+method(trace)     -> "TRACE";
+method(unlock)    -> "UNLOCK".
 
 %% From RFC 2616
 %%
@@ -1772,11 +1789,15 @@ shutting_down(#state{lb_ets_tid = undefined}) ->
     ok;
 shutting_down(#state{lb_ets_tid = Tid,
                      cur_pipeline_size = _Sz}) ->
-    catch ets:match_delete(Tid, {{'_', self()}, '_'}).
+    catch ets:match_delete(Tid, self()).
 
 inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;
-inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz} = State) ->
+inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
+    State;
+inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
+                           lb_ets_tid = Tid} = State) ->
+    ets:update_counter(Tid, self(), {2,1,99999,9999}),
     State#state{cur_pipeline_size = Pipe_sz + 1}.
 
 dec_pipeline_counter(#state{is_closing = true} = State) ->
@@ -1785,8 +1806,13 @@ dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
 dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
-    ets:delete(Tid, {Pipe_sz, self()}),
-    ets:insert(Tid, {{Pipe_sz - 1, self()}, []}),
+    try
+        ets:update_counter(Tid, self(), {2,-1,0,0}),
+        ets:update_counter(Tid, self(), {3,-1,0,0})
+    catch
+        _:_ ->
+            ok
+    end,
     State#state{cur_pipeline_size = Pipe_sz - 1}.
 
 flatten([H | _] = L) when is_integer(H) ->

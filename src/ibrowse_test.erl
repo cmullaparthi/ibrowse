@@ -84,7 +84,7 @@ send_reqs_1(Url, NumWorkers, NumReqsPerWorker) ->
     log_msg("Starting spawning of workers...~n", []),
     spawn_workers(Url, NumWorkers, NumReqsPerWorker),
     log_msg("Finished spawning workers...~n", []),
-    do_wait(),
+    do_wait(Url),
     End_time = now(),
     log_msg("All workers are done...~n", []),
     log_msg("ibrowse_test_results table: ~n~p~n", [ets:tab2list(ibrowse_test_results)]),
@@ -114,24 +114,28 @@ spawn_workers(Url, NumWorkers, NumReqsPerWorker) ->
     ets:insert(pid_table, {Pid, []}),
     spawn_workers(Url, NumWorkers - 1, NumReqsPerWorker).
 
-do_wait() ->
+do_wait(Url) ->
     receive
 	{'EXIT', _, normal} ->
-	    do_wait();
+            catch ibrowse:show_dest_status(Url),
+            catch ibrowse:show_dest_status(),
+	    do_wait(Url);
 	{'EXIT', Pid, Reason} ->
 	    ets:delete(pid_table, Pid),
 	    ets:insert(ibrowse_errors, {Pid, Reason}),
 	    ets:update_counter(ibrowse_test_results, crash, 1),
-	    do_wait();
+	    do_wait(Url);
 	Msg ->
 	    io:format("Recvd unknown message...~p~n", [Msg]),
-	    do_wait()
+	    do_wait(Url)
     after 1000 ->
 	    case ets:info(pid_table, size) of
 		0 ->
 		    done;
 		_ ->
-		    do_wait()
+                    catch ibrowse:show_dest_status(Url),
+                    catch ibrowse:show_dest_status(),
+		    do_wait(Url)
 	    end
     end.
 
@@ -236,16 +240,19 @@ unit_tests(Options) ->
     (catch ibrowse_test_server:start_server(8181, tcp)),
     ibrowse:start(),
     Options_1 = Options ++ [{connect_timeout, 5000}],
+    Test_timeout = proplists:get_value(test_timeout, Options, 60000),
     {Pid, Ref} = erlang:spawn_monitor(?MODULE, unit_tests_1, [self(), Options_1]),
     receive 
 	{done, Pid} ->
 	    ok;
 	{'DOWN', Ref, _, _, Info} ->
 	    io:format("Test process crashed: ~p~n", [Info])
-    after 60000 ->
+    after Test_timeout ->
 	    exit(Pid, kill),
 	    io:format("Timed out waiting for tests to complete~n", [])
-    end.
+    end,
+    catch ibrowse_test_server:stop_server(8181),
+    ok.
 
 unit_tests_1(Parent, Options) ->
     lists:foreach(fun({local_test_fun, Fun_name, Args}) ->

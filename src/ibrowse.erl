@@ -96,6 +96,7 @@
          trace_off/2,
          all_trace_off/0,
          show_dest_status/0,
+         show_dest_status/1,
          show_dest_status/2
         ]).
 
@@ -353,15 +354,16 @@ try_routing_request(_, _, _, _, _, _, _, _, _, _, _) ->
     {error, retry_later}.
 
 merge_options(Host, Port, Options) ->
-    Config_options = get_config_value({options, Host, Port}, []),
+    Config_options = get_config_value({options, Host, Port}, []) ++
+                     get_config_value({options, global}, []),
     lists:foldl(
       fun({Key, Val}, Acc) ->
-                        case lists:keysearch(Key, 1, Options) of
-                            false ->
-                                [{Key, Val} | Acc];
-                            _ ->
-                                Acc
-                        end
+              case lists:keysearch(Key, 1, Options) of
+                  false ->
+                      [{Key, Val} | Acc];
+                  _ ->
+                      Acc
+              end
       end, Options, Config_options).
 
 get_lb_pid(Url) ->
@@ -618,7 +620,11 @@ show_dest_status() ->
                                    )
                                   end
                   end, Dests).
-                                          
+
+show_dest_status(Url) ->                                          
+    #url{host = Host, port = Port} = ibrowse_lib:parse_url(Url),
+    show_dest_status(Host, Port).
+
 %% @doc Shows some internal information about load balancing to a
 %% specified Host:Port. Info about workers spawned using
 %% spawn_worker_process/2 or spawn_link_worker_process/2 is not
@@ -637,19 +643,22 @@ show_dest_status(Host, Port) ->
                 [] ->
                     io:format("Couldn't locate ETS table for ~p~n", [Lb_pid]);
                 [Tid | _] ->
-                    First = ets:first(Tid),
-                    Last = ets:last(Tid),
-                    Size = ets:info(Tid, size),
-                    io:format("LB ETS table id       : ~p~n", [Tid]),
-                    io:format("Num Connections       : ~p~n", [Size]),
-                    case Size of
-                        0 ->
-                            ok;
+                    Tid_rows = [{X, Y, Z} || {X, Y, Z} <- ets:tab2list(Tid),
+                                             is_pid(X), is_integer(Y)],
+                    case Tid_rows of
+                        [] ->
+                            io:format("No active connections~n", []);
                         _ ->
-                            {First_p_sz, _} = First,
-                            {Last_p_sz, _} = Last,
-                            io:format("Smallest pipeline     : ~1000.p~n", [First_p_sz]),
-                            io:format("Largest pipeline      : ~1000.p~n", [Last_p_sz])
+                            Tid_rows_sorted = lists:keysort(2, Tid_rows),
+                            First = hd(Tid_rows_sorted),
+                            Last = lists:last(Tid_rows_sorted),
+                            Size = length(Tid_rows),
+                            io:format("LB ETS table id       : ~p~n", [Tid]),
+                            io:format("Num Connections       : ~p~n", [Size]),
+                            {_, First_p_sz, First_speculative_sz} = First,
+                            {_, Last_p_sz, Last_spec_sz} = Last,
+                            io:format("Smallest pipeline     : ~p:~p~n", [First_p_sz, First_speculative_sz]),
+                            io:format("Largest pipeline      : ~p:~p~n", [Last_p_sz, Last_spec_sz])
                     end
             end
     end.
@@ -730,16 +739,26 @@ import_config(Filename) ->
 
 %% @doc Internal export
 get_config_value(Key) ->
-    [#ibrowse_conf{value = V}] = ets:lookup(ibrowse_conf, Key),
-    V.
+    try
+        [#ibrowse_conf{value = V}] = ets:lookup(ibrowse_conf, Key),
+        V
+    catch
+        error:badarg ->
+            throw({error, ibrowse_not_running})
+    end.
 
 %% @doc Internal export
 get_config_value(Key, DefVal) ->
-    case ets:lookup(ibrowse_conf, Key) of
-        [] ->
-            DefVal;
-        [#ibrowse_conf{value = V}] ->
-            V
+    try
+        case ets:lookup(ibrowse_conf, Key) of
+            [] ->
+                DefVal;
+            [#ibrowse_conf{value = V}] ->
+                V
+        end
+    catch
+        error:badarg ->
+            throw({error, ibrowse_not_running})
     end.
 
 set_config_value(Key, Val) ->

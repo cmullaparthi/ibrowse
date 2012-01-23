@@ -35,7 +35,8 @@ start_server(Port, Sock_type) ->
     spawn_link(Fun).
 
 stop_server(Port) ->
-    exit(whereis(server_proc_name(Port)), kill).
+    catch exit(whereis(server_proc_name(Port)), kill),
+    ok.
 
 server_proc_name(Port) ->
     list_to_atom("ibrowse_test_server_"++integer_to_list(Port)).
