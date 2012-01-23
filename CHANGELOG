@@ -1,5 +1,9 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+23-01-2012 - v3.0.0
+             * Change to the way pipelining works.
+             * Fixed various issues reported
+
 13-04-2011 - v2.2.0
              * Filipe David Manana added IPv6 support. This is a mjor new
                feature, Thank you Filipe!

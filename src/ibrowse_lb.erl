@@ -36,7 +36,9 @@
 		port,
 		max_sessions,
 		max_pipeline_size,
-		num_cur_sessions = 0}).
+		num_cur_sessions = 0,
+                proc_state
+               }).
 
 -include("ibrowse.hrl").
 
@@ -105,6 +107,21 @@ stop(Lb_pid) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
 
+handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
+    gen_server:reply(_From, ok),
+    {stop, normal, State};
+
+handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
+    ets:foldl(fun({{_, Pid}, _}, Acc) ->
+                      ibrowse_http_client:stop(Pid),
+                      Acc
+              end, [], Tid),
+    gen_server:reply(_From, ok),
+    {stop, normal, State};
+
+handle_call(_, _From, #state{proc_state = shutting_down} = State) ->
+    {reply, {error, shutting_down}, State};
+
 %% Update max_sessions in #state with supplied value
 handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _}, _From,
 	    #state{num_cur_sessions = Num} = State) 
@@ -123,18 +140,6 @@ handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options}, _From,
     {reply, {ok, Pid}, State_1#state{num_cur_sessions = Cur + 1,
                                      max_sessions = Max_sess,
                                      max_pipeline_size = Max_pipe}};
-
-handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
-    gen_server:reply(_From, ok),
-    {stop, normal, State};
-
-handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({{_, Pid}, _}, Acc) ->
-                      ibrowse_http_client:stop(Pid),
-                      Acc
-              end, [], Tid),
-    gen_server:reply(_From, ok),
-    {stop, normal, State};
 
 handle_call(Request, _From, State) ->
     Reply = {unknown_request, Request},
@@ -192,7 +197,16 @@ handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
     {noreply, State};
 
 handle_info(timeout, State) ->
-    {noreply, State};
+    %% We can't shutdown the process immediately because a request
+    %% might be in flight. So we first remove the entry from the
+    %% ibrowse_lb ets table, and then shutdown a couple of seconds
+    %% later
+    ets:delete(ibrowse_lb, {State#state.host, State#state.port}),
+    erlang:send_after(2000, self(), shutdown),
+    {noreply, State#state{proc_state = shutting_down}};
+
+handle_info(shutdown, State) ->
+    {stop, normal, State};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -233,9 +247,7 @@ find_best_connection(Pid, Tid, Max_pipe) ->
     end.
 
 maybe_create_ets(#state{ets_tid = undefined} = State) ->
-    Tid = ets:new(ibrowse_lb, [public, 
-                               {write_concurrency, true},
-                               {read_concurrency, true}]),
+    Tid = ets:new(ibrowse_lb, [public, ordered_set]),
     State#state{ets_tid = Tid};
 maybe_create_ets(State) ->
     State.
