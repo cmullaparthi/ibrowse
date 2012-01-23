@@ -1,6 +1,6 @@
 {application, ibrowse,
         [{description, "HTTP client application"},
-         {vsn, git},
+         {vsn, "2.2.0"},
          {modules, [ ibrowse, 
 		     ibrowse_http_client, 
 		     ibrowse_app, 
@@ -8,6 +8,6 @@
 		     ibrowse_lib,
 		     ibrowse_lb ]},
          {registered, []},
-         {applications, [kernel,stdlib,sasl]},
+         {applications, [kernel,stdlib]},
 	 {env, []},
 	 {mod, {ibrowse_app, []}}]}.
