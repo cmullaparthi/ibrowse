@@ -1789,7 +1789,7 @@ shutting_down(#state{lb_ets_tid = undefined}) ->
     ok;
 shutting_down(#state{lb_ets_tid = Tid,
                      cur_pipeline_size = _Sz}) ->
-    catch ets:match_delete(Tid, self()).
+    catch ets:delete(Tid, self()).
 
 inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;
