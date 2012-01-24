@@ -180,18 +180,22 @@ get_value(Tag, TVL) ->
     V.
 
 parse_url(Url) ->
-    case parse_url(Url, get_protocol, #url{abspath=Url}, []) of
-        #url{host_type = undefined, host = Host} = UrlRec ->
-            case inet_parse:address(Host) of
-                {ok, {_, _, _, _, _, _, _, _}} ->
-                    UrlRec#url{host_type = ipv6_address};
-                {ok, {_, _, _, _}} ->
-                    UrlRec#url{host_type = ipv4_address};
-                _ ->
-                    UrlRec#url{host_type = hostname}
-            end;
-        Else ->
-            Else
+    try
+        case parse_url(Url, get_protocol, #url{abspath=Url}, []) of
+            #url{host_type = undefined, host = Host} = UrlRec ->
+                case inet_parse:address(Host) of
+                    {ok, {_, _, _, _, _, _, _, _}} ->
+                        UrlRec#url{host_type = ipv6_address};
+                    {ok, {_, _, _, _}} ->
+                        UrlRec#url{host_type = ipv4_address};
+                    _ ->
+                        UrlRec#url{host_type = hostname}
+                end;
+            _ ->
+                {error, invalid_uri}
+        end
+    catch _:_ ->
+            {error, invalid_uri}
     end.
 
 parse_url([$:, $/, $/ | _], get_protocol, Url, []) ->
