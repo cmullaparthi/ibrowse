@@ -112,7 +112,7 @@ handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     {stop, normal, State};
 
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({{_, Pid}, _}, Acc) ->
+    ets:foldl(fun({Pid, _, _}, Acc) ->
                       ibrowse_http_client:stop(Pid),
                       Acc
               end, [], Tid),

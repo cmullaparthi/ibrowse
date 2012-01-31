@@ -1,5 +1,8 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+31-01-2012 - v3.0.2
+             * Fixed bug when stopping ibrowse. Not service affecting.
+
 23-01-2012 - v3.0.1
              * Fixed bug highlighted by Dialyzer
 
