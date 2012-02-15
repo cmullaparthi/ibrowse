@@ -173,14 +173,13 @@ handle_info({'EXIT', Pid, _Reason},
 		   ets_tid = Tid} = State) ->
     ets:match_delete(Tid, {{'_', Pid}, '_'}),
     Cur_1 = Cur - 1,
-    State_1 = case Cur_1 of
+    case Cur_1 of
 		  0 ->
 		      ets:delete(Tid),
-		      State#state{ets_tid = undefined};
+			  {noreply, State#state{ets_tid = undefined, num_cur_sessions = 0}, 10000};
 		  _ ->
-		      State
-	      end,
-    {noreply, State_1#state{num_cur_sessions = Cur_1}, 10000};
+		      {noreply, State#state{num_cur_sessions = Cur_1}}
+	      end;
 
 handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
