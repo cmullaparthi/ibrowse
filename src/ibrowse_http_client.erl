@@ -562,17 +562,13 @@ do_send_body(Body, State, _TE) ->
 
 do_send_body1(Source, Resp, State, TE) ->
     case Resp of
-		{ok, <<>>} ->
+		{ok, Data} when Data == []; Data == <<>> ->
 			do_send_body({Source}, State, TE);
-		{ok, <<>>, New_source_state} ->
-			do_send_body({Source, New_source_state}, State, TE);
-		{ok, []} ->
-			do_send_body({Source}, State, TE);
-		{ok, [], New_source_state} ->
-			do_send_body({Source, New_source_state}, State, TE);
         {ok, Data} ->
             do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source}, State, TE);
+		{ok, Data, New_source_state} when Data == []; Data == <<>> ->
+			do_send_body({Source, New_source_state}, State, TE);
         {ok, Data, New_source_state} ->
             do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source, New_source_state}, State, TE);
