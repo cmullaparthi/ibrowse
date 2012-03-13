@@ -1,5 +1,11 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+13-03-2012 - v3.0.3
+             * Fixes the following issues
+               https://github.com/cmullaparthi/ibrowse/issues/64
+               https://github.com/cmullaparthi/ibrowse/issues/63
+               https://github.com/cmullaparthi/ibrowse/issues/62
+
 31-01-2012 - v3.0.2
              * Fixed bug when stopping ibrowse. Not service affecting.
 
