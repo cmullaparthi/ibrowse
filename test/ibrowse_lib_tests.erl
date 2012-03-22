@@ -6,7 +6,7 @@
 
 -module(ibrowse_lib_tests).
 -include_lib("eunit/include/eunit.hrl").
--include("../src/ibrowse.hrl").
+-include("../include/ibrowse.hrl").
 
 
 parse_urls_test_() ->
