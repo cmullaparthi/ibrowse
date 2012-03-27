@@ -1554,22 +1554,36 @@ fmt_val(Term)                 -> io_lib:format("~p", [Term]).
 
 crnl() -> "\r\n".
 
-method(connect)   -> "CONNECT";
-method(copy)      -> "COPY";
-method(delete)    -> "DELETE";
-method(get)       -> "GET";
-method(head)      -> "HEAD";
-method(lock)      -> "LOCK";
-method(mkcol)     -> "MKCOL";
-method(move)      -> "MOVE";
-method(options)   -> "OPTIONS";
-method(patch)     -> "PATCH";
-method(post)      -> "POST";
-method(propfind)  -> "PROPFIND";
-method(proppatch) -> "PROPPATCH";
-method(put)       -> "PUT";
-method(trace)     -> "TRACE";
-method(unlock)    -> "UNLOCK".
+method(connect)     -> "CONNECT";
+method(delete)      -> "DELETE";
+method(get)         -> "GET";
+method(head)        -> "HEAD";
+method(options)     -> "OPTIONS";
+method(post)        -> "POST";
+method(put)         -> "PUT";
+method(trace)       -> "TRACE";
+%% webdav
+method(copy)        -> "COPY";
+method(lock)        -> "LOCK";
+method(mkcol)       -> "MKCOL";
+method(move)        -> "MOVE";
+method(propfind)    -> "PROPFIND";
+method(proppatch)   -> "PROPPATCH";
+method(search)      -> "SEARCH";
+method(unlock)      -> "UNLOCK";
+%% subversion %%
+method(report)      -> "REPORT";
+method(mkactivity)  -> "MKACTIVITY";
+method(checkout)    -> "CHECKOUT";
+method(merge)       -> "MERGE";
+%% upnp
+method(msearch)     -> "MSEARCH";
+method(notify)      -> "NOTIFY";
+method(subscribe)   -> "SUBSCRIBE";
+method(unsubscribe) -> "UNSUBSCRIBE";
+%% rfc-5789
+method(patch)       -> "PATCH";
+method(purge)       -> "PURGE".
 
 %% From RFC 2616
 %%
