@@ -1047,7 +1047,13 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     do_error_reply(State#state{reqs = Reqs_1},
                                    {error, proxy_tunnel_failed}),
                     {error, proxy_tunnel_failed};
-                _ when Method == head ->
+                _ when Method == head,
+                       TransferEncoding =/= "chunked" ->
+                    %% This is not supposed to happen, but it does. An
+                    %% Apache server was observed to send an "empty"
+                    %% body, but in a Chunked-Transfer-Encoding way,
+                    %% which meant there was still a body.
+                    %% Issue #67 on Github
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
@@ -1091,7 +1097,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                             State_2
                     end;
                 undefined when HttpVsn =:= "HTTP/1.0";
-                ConnClose =:= "close" ->
+                               ConnClose =:= "close" ->
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1#state{reply_buffer = Data_1};
                 undefined ->

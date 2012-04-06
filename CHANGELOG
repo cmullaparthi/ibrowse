@@ -1,5 +1,9 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+06-04-2012 - v3.0.4
+             * Fix for the following issue
+               https://github.com/cmullaparthi/ibrowse/issues/67
+
 13-03-2012 - v3.0.3
              * Fixes the following issues
                https://github.com/cmullaparthi/ibrowse/issues/64

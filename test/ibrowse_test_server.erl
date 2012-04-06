@@ -35,7 +35,7 @@ start_server(Port, Sock_type) ->
     spawn_link(Fun).
 
 stop_server(Port) ->
-    catch exit(whereis(server_proc_name(Port)), kill),
+    server_proc_name(Port) ! stop,
     ok.
 
 server_proc_name(Port) ->
@@ -99,6 +99,8 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
         {tcp_closed, Sock} ->
             do_trace("Client closed connection~n", []),
             ok;
+        stop ->
+            ok;
         Other ->
             do_trace("Recvd unknown msg: ~p~n", [Other]),
             exit({unknown_msg, Other})
@@ -144,6 +146,12 @@ process_request(Sock, Sock_type,
     timer:sleep(30000),
     do_trace("...Sending response now.~n", []),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
+    do_send(Sock, Sock_type, Resp);
+process_request(Sock, Sock_type,
+                #request{method='HEAD',
+                         headers = _Headers,
+                         uri = {abs_path, "/ibrowse_head_transfer_enc"}}) ->
+    Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nTransfer-Encoding: chunked\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n0\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
