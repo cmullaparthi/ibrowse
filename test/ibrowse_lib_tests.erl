@@ -124,12 +124,12 @@ parse_urls() ->
                     protocol = http
                    },
                  ibrowse_lib:parse_url("http://[::192.9.5.5]:6000/foo?q=bar")),
-    ?assertMatch({error, {invalid_ipv6_address, ":1080:0:0:0:8:800:200C:417A:"}},
+    ?assertMatch({error, invalid_uri},
                  ibrowse_lib:parse_url("http://[:1080:0:0:0:8:800:200C:417A:]:6000/foo?q=bar")),
-    ?assertMatch({error, {invalid_ipv6_address, "12::z"}},
+    ?assertMatch({error, invalid_uri},
                  ibrowse_lib:parse_url("http://[12::z]")),
-    ?assertMatch({error, {invalid_username_or_host, _}},
+    ?assertMatch({error, invalid_uri},
                  ibrowse_lib:parse_url("http://foo[1080:0:0:0:8:800:200C:417A]:6000")),
-    ?assertMatch({error, missing_password},
+    ?assertMatch({error, invalid_uri},
                  ibrowse_lib:parse_url("http://foo:[1080:0:0:0:8:800:200C:417A]:6000")),
     ok.
