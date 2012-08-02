@@ -1012,24 +1012,25 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
             LCHeaders = [{to_lower(X), Y} || {X,Y} <- Headers_1],
             ConnClose = to_lower(get_value("connection", LCHeaders, "false")),
             IsClosing = is_connection_closing(HttpVsn, ConnClose),
-            case IsClosing of
-                true ->
-                    shutting_down(State);
-                false ->
-                    ok
-            end,
+            State_0 = case IsClosing of
+			  true ->
+			      shutting_down(State),
+			      State#state{is_closing = IsClosing};
+			  false ->
+			      State
+		      end,
             Give_raw_headers = get_value(give_raw_headers, Options, false),
             State_1 = case Give_raw_headers of
                           true ->
-                              State#state{recvd_headers=Headers_1, status=get_body,
-                                          reply_buffer = <<>>,
-                                          status_line = Status_line,
-                                          raw_headers = Raw_headers,
-                                          http_status_code=StatCode, is_closing=IsClosing};
+                              State_0#state{recvd_headers=Headers_1, status=get_body,
+					    reply_buffer = <<>>,
+					    status_line = Status_line,
+					    raw_headers = Raw_headers,
+					    http_status_code=StatCode};
                           false ->
-                              State#state{recvd_headers=Headers_1, status=get_body,
-                                          reply_buffer = <<>>,
-                                          http_status_code=StatCode, is_closing=IsClosing}
+                              State_0#state{recvd_headers=Headers_1, status=get_body,
+					    reply_buffer = <<>>,
+					    http_status_code=StatCode}
                       end,
             put(conn_close, ConnClose),
             TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
@@ -1038,10 +1039,10 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                        hd(StatCode) == $2 ->
                     {_, Reqs_1} = queue:out(Reqs),
                     cancel_timer(T_ref),
-                    upgrade_to_ssl(set_cur_request(State#state{reqs = Reqs_1,
-                                                               recvd_headers = [],
-                                                               status = idle
-                                                              }));
+                    upgrade_to_ssl(set_cur_request(State_0#state{reqs = Reqs_1,
+								 recvd_headers = [],
+								 status = idle
+								}));
                 _ when Method == connect ->
                     {_, Reqs_1} = queue:out(Reqs),
                     do_error_reply(State#state{reqs = Reqs_1},
@@ -1821,8 +1822,11 @@ inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
 inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                            lb_ets_tid = Tid} = State) ->
-    ets:update_counter(Tid, self(), {2,1,99999,9999}),
+    update_counter(Tid, self(), {2,1,99999,9999}),
     State#state{cur_pipeline_size = Pipe_sz + 1}.
+
+update_counter(Tid, Key, Args) ->
+    ets:update_counter(Tid, Key, Args).
 
 dec_pipeline_counter(#state{is_closing = true} = State) ->
     State;
@@ -1831,8 +1835,8 @@ dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
 dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
     try
-        ets:update_counter(Tid, self(), {2,-1,0,0}),
-        ets:update_counter(Tid, self(), {3,-1,0,0})
+        update_counter(Tid, self(), {2,-1,0,0}),
+        update_counter(Tid, self(), {3,-1,0,0})
     catch
         _:_ ->
             ok
