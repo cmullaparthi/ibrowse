@@ -1034,6 +1034,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                       end,
             put(conn_close, ConnClose),
             TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
+	    Head_response_with_body = lists:member({workaround, head_response_with_body}, Options),
             case get_value("content-length", LCHeaders, undefined) of
                 _ when Method == connect,
                        hd(StatCode) == $2 ->
@@ -1048,13 +1049,22 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     do_error_reply(State#state{reqs = Reqs_1},
                                    {error, proxy_tunnel_failed}),
                     {error, proxy_tunnel_failed};
-                _ when Method == head,
-                       TransferEncoding =/= "chunked" ->
+                _ when Method =:= head,
+                       Head_response_with_body =:= true ->
                     %% This is not supposed to happen, but it does. An
                     %% Apache server was observed to send an "empty"
                     %% body, but in a Chunked-Transfer-Encoding way,
                     %% which meant there was still a body.
                     %% Issue #67 on Github
+                    {_, Reqs_1} = queue:out(Reqs),
+                    send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
+                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
+                                         {ok, StatCode, Headers_1, []}),
+                    cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
+                    State_2 = reset_state(State_1_1),
+                    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
+                    parse_response(Data_1, State_3);
+		_ when Method =:= head ->
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
