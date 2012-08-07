@@ -562,13 +562,13 @@ do_send_body(Body, State, _TE) ->
 
 do_send_body1(Source, Resp, State, TE) ->
     case Resp of
-		{ok, Data} when Data == []; Data == <<>> ->
-			do_send_body({Source}, State, TE);
+                {ok, Data} when Data == []; Data == <<>> ->
+                        do_send_body({Source}, State, TE);
         {ok, Data} ->
             do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source}, State, TE);
-		{ok, Data, New_source_state} when Data == []; Data == <<>> ->
-			do_send_body({Source, New_source_state}, State, TE);
+                {ok, Data, New_source_state} when Data == []; Data == <<>> ->
+                        do_send_body({Source, New_source_state}, State, TE);
         {ok, Data, New_source_state} ->
             do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source, New_source_state}, State, TE);
@@ -994,8 +994,12 @@ chunk_request_body(Body, _ChunkSize, Acc) when is_list(Body) ->
     lists:reverse(["\r\n", LastChunk, Chunk | Acc]).
 
 
-parse_response(_Data, #state{cur_req = undefined}=State) ->
+parse_response(<<>>, #state{cur_req = undefined}=State) ->
     State#state{status = idle};
+parse_response(Data, #state{cur_req = undefined}=State) ->
+    do_trace("Data left to process when no pending request. ~1000.p~n", [Data]),
+    {error, data_in_status_idle};
+
 parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                             cur_req = CurReq} = State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
@@ -1013,58 +1017,49 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
             ConnClose = to_lower(get_value("connection", LCHeaders, "false")),
             IsClosing = is_connection_closing(HttpVsn, ConnClose),
             State_0 = case IsClosing of
-			  true ->
-			      shutting_down(State),
-			      State#state{is_closing = IsClosing};
-			  false ->
-			      State
-		      end,
+                          true ->
+                              shutting_down(State),
+                              State#state{is_closing = IsClosing};
+                          false ->
+                              State
+                      end,
             Give_raw_headers = get_value(give_raw_headers, Options, false),
             State_1 = case Give_raw_headers of
                           true ->
                               State_0#state{recvd_headers=Headers_1, status=get_body,
-					    reply_buffer = <<>>,
-					    status_line = Status_line,
-					    raw_headers = Raw_headers,
-					    http_status_code=StatCode};
+                                            reply_buffer = <<>>,
+                                            status_line = Status_line,
+                                            raw_headers = Raw_headers,
+                                            http_status_code=StatCode};
                           false ->
                               State_0#state{recvd_headers=Headers_1, status=get_body,
-					    reply_buffer = <<>>,
-					    http_status_code=StatCode}
+                                            reply_buffer = <<>>,
+                                            http_status_code=StatCode}
                       end,
             put(conn_close, ConnClose),
             TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
-	    Head_response_with_body = lists:member({workaround, head_response_with_body}, Options),
+            Head_response_with_body = lists:member({workaround, head_response_with_body}, Options),
             case get_value("content-length", LCHeaders, undefined) of
                 _ when Method == connect,
                        hd(StatCode) == $2 ->
                     {_, Reqs_1} = queue:out(Reqs),
                     cancel_timer(T_ref),
                     upgrade_to_ssl(set_cur_request(State_0#state{reqs = Reqs_1,
-								 recvd_headers = [],
-								 status = idle
-								}));
+                                                                 recvd_headers = [],
+                                                                 status = idle
+                                                                }));
                 _ when Method == connect ->
                     {_, Reqs_1} = queue:out(Reqs),
                     do_error_reply(State#state{reqs = Reqs_1},
                                    {error, proxy_tunnel_failed}),
                     {error, proxy_tunnel_failed};
                 _ when Method =:= head,
-                       Head_response_with_body =:= true ->
-                    %% This is not supposed to happen, but it does. An
-                    %% Apache server was observed to send an "empty"
-                    %% body, but in a Chunked-Transfer-Encoding way,
-                    %% which meant there was still a body.
-                    %% Issue #67 on Github
-                    {_, Reqs_1} = queue:out(Reqs),
-                    send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
-                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
-                                         {ok, StatCode, Headers_1, []}),
-                    cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
-                    State_2 = reset_state(State_1_1),
-                    State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
-                    parse_response(Data_1, State_3);
-		_ when Method =:= head ->
+                       Head_response_with_body =:= false ->
+                    %% This (HEAD response with body) is not supposed
+                    %% to happen, but it does. An Apache server was
+                    %% observed to send an "empty" body, but in a
+                    %% Chunked-Transfer-Encoding way, which meant
+                    %% there was still a body.  Issue #67 on Github
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,

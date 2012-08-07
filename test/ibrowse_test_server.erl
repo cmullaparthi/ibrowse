@@ -151,7 +151,7 @@ process_request(Sock, Sock_type,
                 #request{method='HEAD',
                          headers = _Headers,
                          uri = {abs_path, "/ibrowse_head_transfer_enc"}}) ->
-    Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nTransfer-Encoding: chunked\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n0\r\n\r\n">>,
+    Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nContent-Length:5\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type,
                 #request{method='HEAD',
