@@ -996,7 +996,7 @@ chunk_request_body(Body, _ChunkSize, Acc) when is_list(Body) ->
 
 parse_response(<<>>, #state{cur_req = undefined}=State) ->
     State#state{status = idle};
-parse_response(Data, #state{cur_req = undefined}=State) ->
+parse_response(Data, #state{cur_req = undefined}) ->
     do_trace("Data left to process when no pending request. ~1000.p~n", [Data]),
     {error, data_in_status_idle};
 
