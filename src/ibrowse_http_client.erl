@@ -15,7 +15,9 @@
 %% External exports
 -export([
          start_link/1,
+         start_link/2,
          start/1,
+         start/2,
          stop/1,
          send_req/7
         ]).
@@ -79,10 +81,16 @@
 %% Description: Starts the server
 %%--------------------------------------------------------------------
 start(Args) ->
-    gen_server:start(?MODULE, Args, []).
+    start(Args, []).
+
+start(Args, Options) ->
+    gen_server:start(?MODULE, Args, Options).
 
 start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+    start_link(Args, []).
+
+start_link(Args, Options) ->
+    gen_server:start_link(?MODULE, Args, Options).
 
 stop(Conn_pid) ->
     case catch gen_server:call(Conn_pid, stop) of
