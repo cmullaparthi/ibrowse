@@ -175,9 +175,11 @@ send_req(Url, Headers, Method) ->
 send_req(Url, Headers, Method, Body) ->
     send_req(Url, Headers, Method, Body, []).
 
-%% @doc Same as send_req/4. 
-%% For a description of SSL Options, look in the <a href="http://www.erlang.org/doc/apps/ssl/index.html">ssl</a> manpage. If the
-%% HTTP Version to use is not specified, the default is 1.1.
+%% @doc Same as send_req/4.
+
+%% For a description of SSL Options, look in the <a href="http://www.erlang.org/doc/apps/ssl/index.html">ssl</a> manpage.
+%% For a description of Process Options, look in the <a href="http://www.erlang.org/doc/man/gen_server.html">gen_server</a> manpage.
+%% If the HTTP Version to use is not specified, the default is 1.1.
 %% <br/>
 %% <ul>
 %% <li>The <code>host_header</code> option is useful in the case where ibrowse is
@@ -286,7 +288,8 @@ send_req(Url, Headers, Method, Body) ->
 %%          {headers_as_is, boolean()}         |
 %%          {give_raw_headers, boolean()}      |
 %%          {preserve_chunked_encoding,boolean()}     |
-%%          {workaround, head_response_with_body}
+%%          {workaround, head_response_with_body}     |
+%%          {worker_process_options, list()}
 %%
 %% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()
@@ -340,10 +343,12 @@ try_routing_request(Lb_pid, Parsed_url,
                     Max_pipeline_size,
                     {SSLOptions, IsSSL}, 
                     Headers, Method, Body, Options_1, Timeout, Try_count) when Try_count < 3 ->
+    ProcessOptions = get_value(worker_process_options, Options_1, []),
     case ibrowse_lb:spawn_connection(Lb_pid, Parsed_url,
                                              Max_sessions, 
                                              Max_pipeline_size,
-                                             {SSLOptions, IsSSL}) of
+                                             {SSLOptions, IsSSL},
+                                             ProcessOptions) of
         {ok, Conn_Pid} ->
             case do_send_req(Conn_Pid, Parsed_url, Headers,
                              Method, Body, Options_1, Timeout) of
@@ -470,28 +475,32 @@ ensure_bin({Fun, _} = Body) when is_function(Fun) -> Body.
 %% request is sent via any of the send_req_direct/4,5,6,7 functions.<br/>
 %% <b>Note:</b> It is the responsibility of the calling process to control
 %% pipeline size on such connections.
-%%
-%% @spec spawn_worker_process(Url::string()) -> {ok, pid()}
-spawn_worker_process(Url) ->
-    ibrowse_http_client:start(Url).
 
-%% @doc Same as spawn_worker_process/1 but takes as input a Host and Port
-%% instead of a URL.
-%% @spec spawn_worker_process(Host::string(), Port::integer()) -> {ok, pid()}
-spawn_worker_process(Host, Port) ->
-    ibrowse_http_client:start({Host, Port}).
+%% @spec spawn_worker_process(Url::string() | {Host::string(), Port::integer()}) -> {ok, pid()}
+spawn_worker_process(Args) ->
+    spawn_worker_process(Args, []).
+
+%% @doc Same as spawn_worker_process/1 except with Erlang process options.
+%% @spec spawn_worker_process(Url::string() | {Host::string(), Port::integer(), Options::list()) -> {ok, pid()}
+spawn_worker_process(Host, Port) when is_list(Host), is_integer(Port) ->
+    %% Convert old API calls to new API format.
+    spawn_worker_process({Host, Port}, []);
+spawn_worker_process(Args, Options) ->
+    ibrowse_http_client:start(Args, Options).
 
 %% @doc Same as spawn_worker_process/1 except the the calling process
 %% is linked to the worker process which is spawned.
-%% @spec spawn_link_worker_process(Url::string()) -> {ok, pid()}
-spawn_link_worker_process(Url) ->
-    ibrowse_http_client:start_link(Url).
+%% @spec spawn_link_worker_process(Url::string() | {Host::string(), Port::integer()}) -> {ok, pid()}
+spawn_link_worker_process(Args) ->
+    spawn_link_worker_process(Args, []).
 
-%% @doc Same as spawn_worker_process/2 except the the calling process
-%% is linked to the worker process which is spawned.
-%% @spec spawn_link_worker_process(Host::string(), Port::integer()) -> {ok, pid()}
-spawn_link_worker_process(Host, Port) ->
-    ibrowse_http_client:start_link({Host, Port}).
+%% @doc Same as spawn_link_worker_process/1 except with Erlang process options.
+%% @spec spawn_link_worker_process(Url::string() | {Host::string(), Port::integer(), Options::list()) -> {ok, pid()}
+spawn_link_worker_process(Host, Port) when is_list(Host), is_integer(Port) ->
+    %% Convert old API calls to new API format.
+    spawn_link_worker_process({Host, Port}, []);
+spawn_link_worker_process(Args, Options) ->
+    ibrowse_http_client:start_link(Args, Options).
 
 %% @doc Terminate a worker process spawned using
 %% spawn_worker_process/2 or spawn_link_worker_process/2. Requests in
