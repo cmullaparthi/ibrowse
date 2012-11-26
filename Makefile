@@ -12,7 +12,6 @@ install: all
 
 test: all
 	./rebar eunit
-	(cd test; make) 
 	erl -noshell -pa .eunit -pa test -s ibrowse -s ibrowse_test unit_tests \
 	-s ibrowse_test verify_chunked_streaming \
 	-s ibrowse_test test_chunked_streaming_once \
