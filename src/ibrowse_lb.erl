@@ -231,7 +231,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 find_best_connection(Tid, Max_pipe) ->
+    ets:safe_fixtable(Tid, true),
     Res = find_best_connection(ets:first(Tid), Tid, Max_pipe),
+    ets:safe_fixtable(Tid, false),
     Res.
 
 find_best_connection('$end_of_table', _, _) ->
@@ -240,9 +242,14 @@ find_best_connection(Pid, Tid, Max_pipe) ->
     case ets:lookup(Tid, Pid) of
         [{Pid, Cur_sz, Speculative_sz}] when Cur_sz < Max_pipe,
                                              Speculative_sz < Max_pipe ->
-            ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}),
-            {ok, Pid};
-        _ ->
+            case catch ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}) of
+                {'EXIT', _} ->
+                    %% The selected process has shutdown
+                    find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe);
+                _ ->
+                    {ok, Pid}
+            end;
+         _ ->
             find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe)
     end.
 
