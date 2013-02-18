@@ -1570,6 +1570,7 @@ get_crlf_pos(<<>>, _)                     -> no.
 fmt_val(L) when is_list(L)    -> L;
 fmt_val(I) when is_integer(I) -> integer_to_list(I);
 fmt_val(A) when is_atom(A)    -> atom_to_list(A);
+fmt_val(B) when is_binary(B)    -> B;
 fmt_val(Term)                 -> io_lib:format("~p", [Term]).
 
 crnl() -> "\r\n".
