@@ -1,5 +1,9 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+09-04-2013 - v4.0.2
+             * Tagging master with new version to cover changes
+               contributed over the past few months via various pull requests
+
 07-08-2012 - v4.0.1
              * Fix issue 67 properly.
 
