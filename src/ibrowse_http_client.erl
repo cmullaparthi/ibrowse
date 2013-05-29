@@ -233,12 +233,12 @@ handle_info({ssl_error, _Sock, Reason}, State) ->
     {stop, normal, State};
 
 handle_info({req_timedout, From}, State) ->
-    case lists:keymember(From, #request.from, queue:to_list(State#state.reqs)) of
+    case lists:keysearch(From, #request.from, queue:to_list(State#state.reqs)) of
         false ->
             {noreply, State};
-        true ->
+        {value, #request{stream_to = StreamTo, req_id = ReqId}} ->
+            catch StreamTo ! {ibrowse_async_response_timeout, ReqId},
             shutting_down(State),
-%%            do_error_reply(State, req_timedout),
             {stop, normal, State}
     end;
 
