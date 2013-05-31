@@ -63,7 +63,7 @@
                   stream_chunk_size,
                   save_response_to_file = false,
                   tmp_file_name, tmp_file_fd, preserve_chunked_encoding,
-                  response_format, timer_ref}).
+                  response_format, timer_ref, raw_req}).
 
 -import(ibrowse_lib, [
                       get_value/2,
@@ -471,7 +471,9 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
                          }=State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
              response_format = Resp_format,
-             options = Options} = CurReq,
+             options = Options,
+             raw_req = Raw_req
+            } = CurReq,
     case IsClosing of
         true ->
             {_, Reqs_1} = queue:out(Reqs),
@@ -482,11 +484,16 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
                            ok = file:close(Fd),
                            {file, TmpFilename}
                    end,
+            Give_raw_req = get_value(return_raw_request, Options, false),
             Reply = case get_value(give_raw_headers, Options, false) of
-                          true ->
+                        true when Give_raw_req == false->
                             {ok, Status_line, Raw_headers, Body};
+                        true ->
+                            {ok, Status_line, Raw_headers, Body, Raw_req};
+                        false when Give_raw_req == false ->
+                            {ok, SC, Headers, Buf};
                         false ->
-                            {ok, SC, Headers, Buf}
+                            {ok, SC, Headers, Buf, Raw_req}
                     end,
             State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
             ok = do_error_reply(State_1#state{reqs = Reqs_1}, connection_closed),
@@ -562,29 +569,43 @@ do_send(Req, #state{socket = Sock, is_ssl = false}) ->  gen_tcp:send(Sock, Req).
 do_send_body(Source, State, TE) when is_function(Source) ->
     do_send_body({Source}, State, TE);
 do_send_body({Source}, State, TE) when is_function(Source) ->
-    do_send_body1(Source, Source(), State, TE);
+    do_send_body_1(generate_body(Source),
+                   State, TE, []);
 do_send_body({Source, Source_state}, State, TE) when is_function(Source) ->
-    do_send_body1(Source, Source(Source_state), State, TE);
+    do_send_body_1(generate_body({Source, Source_state}),
+                   State, TE, []);
 do_send_body(Body, State, _TE) ->
-    do_send(Body, State).
+    case do_send(Body, State) of
+        ok ->
+            {ok, Body};
+        Ret ->
+            Ret
+    end.
 
-do_send_body1(Source, Resp, State, TE) ->
+generate_body({Source, Source_state} = In) ->
+    case Source(Source_state) of
+        {ok, Data, Source_state_1} ->
+            {{ok, Data}, {Source, Source_state_1}};
+        Ret ->
+            {Ret, In}
+    end;
+generate_body(Source) ->
+    {Source(), Source}.
+
+do_send_body_1({Resp, Source}, State, TE, Acc) ->
     case Resp of
-                {ok, Data} when Data == []; Data == <<>> ->
-                        do_send_body({Source}, State, TE);
+        {ok, Data} when Data == []; Data == <<>> ->
+             do_send_body_1(generate_body(Source), State, TE, Acc);
         {ok, Data} ->
-            do_send(maybe_chunked_encode(Data, TE), State),
-            do_send_body({Source}, State, TE);
-                {ok, Data, New_source_state} when Data == []; Data == <<>> ->
-                        do_send_body({Source, New_source_state}, State, TE);
-        {ok, Data, New_source_state} ->
-            do_send(maybe_chunked_encode(Data, TE), State),
-            do_send_body({Source, New_source_state}, State, TE);
+            Data_1 = maybe_chunked_encode(Data, TE),
+            do_send(Data_1, State),
+            do_send_body_1(generate_body(Source), State, TE, [Data_1 | Acc]);
         eof when TE == true ->
-            do_send(<<"0\r\n\r\n">>, State),
-            ok;
+            Body = <<"0\r\n\r\n">>,
+            do_send(Body, State),
+            {ok, list_to_binary(lists:reverse([Body | Acc]))};
         eof ->
-            ok;
+            {ok, list_to_binary(lists:reverse(Acc))};
         Err ->
             Err
     end.
@@ -695,7 +716,7 @@ send_req_1(From,
     case do_send(Req, State) of
         ok ->
             case do_send_body(Body_1, State_1, TE) of
-                ok ->
+                {ok, _Sent_body} ->
                     trace_request_body(Body_1),
                     active_once(State_1),
                     State_1_1 = inc_pipeline_counter(State_1),
@@ -759,6 +780,11 @@ send_req_1(From,
               _ ->
                   erlang:send_after(Timeout, self(), {req_timedout, From})
           end,
+    Headers_1 = maybe_modify_headers(Url, Method, Options, Headers, State),
+    {Req, Body_1} = make_request(Method,
+                                 Headers_1,
+                                 AbsPath, RelPath, Body, Options, State,
+                                 ReqId),
     NewReq = #request{url                    = Url,
                       method                 = Method,
                       stream_to              = StreamTo,
@@ -773,26 +799,24 @@ send_req_1(From,
                       preserve_chunked_encoding = get_value(preserve_chunked_encoding, Options, false),
                       timer_ref              = Ref
                      },
-    State_1 = State#state{reqs=queue:in(NewReq, State#state.reqs)},
-    Headers_1 = maybe_modify_headers(Url, Method, Options, Headers, State_1),
-    {Req, Body_1} = make_request(Method,
-                                 Headers_1,
-                                 AbsPath, RelPath, Body, Options, State_1,
-                                 ReqId),
     trace_request(Req),
-    do_setopts(Socket, Caller_socket_options, State_1),
+    do_setopts(Socket, Caller_socket_options, State),
     TE = is_chunked_encoding_specified(Options),
-    case do_send(Req, State_1) of
+    case do_send(Req, State) of
         ok ->
-            case do_send_body(Body_1, State_1, TE) of
-                ok ->
-                    trace_request_body(Body_1),
+            case do_send_body(Body_1, State, TE) of
+                {ok, Sent_body} ->
+                    trace_request_body(Sent_body),
+                    Raw_req = list_to_binary([Req, Sent_body]),
+                    NewReq_1 = NewReq#request{raw_req = Raw_req},
+                    State_1 = State#state{reqs=queue:in(NewReq_1, State#state.reqs)},
                     State_2 = inc_pipeline_counter(State_1),
                     active_once(State_2),
                     State_3 = case Status of
                                   idle ->
-                                      State_2#state{status     = get_header,
-                                                    cur_req    = NewReq};
+                                      State_2#state{
+                                        status     = get_header,
+                                        cur_req    = NewReq_1};
                                   _ ->
                                       State_2
                               end,
@@ -800,21 +824,27 @@ send_req_1(From,
                         undefined ->
                             ok;
                         _ ->
-                            gen_server:reply(From, {ibrowse_req_id, ReqId})
+                            gen_server:reply(From, {ibrowse_req_id, ReqId}),
+                            case get_value(return_raw_request, Options, false) of
+                                false ->
+                                    ok;
+                                true ->
+                                    catch StreamTo ! {ibrowse_async_raw_req, Raw_req}
+                            end
                     end,
                     State_4 = set_inac_timer(State_3),
                     {noreply, State_4};
                 Err ->
-                    shutting_down(State_1),
+                    shutting_down(State),
                     do_trace("Send failed... Reason: ~p~n", [Err]),
                     gen_server:reply(From, {error, {send_failed, Err}}),
-                    {stop, normal, State_1}
+                    {stop, normal, State}
             end;
         Err ->
-            shutting_down(State_1),
+            shutting_down(State),
             do_trace("Send failed... Reason: ~p~n", [Err]),
             gen_server:reply(From, {error, {send_failed, Err}}),
-            {stop, normal, State_1}
+            {stop, normal, State}
     end.
 
 maybe_modify_headers(#url{}, connect, _, Headers, State) ->
@@ -1012,7 +1042,8 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                             cur_req = CurReq} = State) ->
     #request{from=From, stream_to=StreamTo, req_id=ReqId,
              method=Method, response_format = Resp_format,
-             options = Options, timer_ref = T_ref
+             options = Options, timer_ref = T_ref,
+             raw_req = Raw_req
             } = CurReq,
     MaxHeaderSize = ibrowse:get_config_value(max_headers_size, infinity),
     case scan_header(Acc, Data) of
@@ -1032,6 +1063,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                               State
                       end,
             Give_raw_headers = get_value(give_raw_headers, Options, false),
+            Give_raw_req = get_value(return_raw_request, Options, false),
             State_1 = case Give_raw_headers of
                           true ->
                               State_0#state{recvd_headers=Headers_1, status=get_body,
@@ -1070,8 +1102,13 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     %% there was still a body.  Issue #67 on Github
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
-                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
-                                         {ok, StatCode, Headers_1, []}),
+                    Reply = case Give_raw_req of
+                                false ->
+                                    {ok, StatCode, Headers_1, []};
+                                true ->
+                                    {ok, StatCode, Headers_1, [], Raw_req}
+                            end,
+                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format, Reply),
                     cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
                     State_2 = reset_state(State_1_1),
                     State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
@@ -1090,8 +1127,13 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     %% RFC2616 - Sec 4.4
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
-                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
-                                         {ok, StatCode, Headers_1, []}),
+                    Reply = case Give_raw_req of
+                                true ->
+                                    {ok, StatCode, Headers_1, []};
+                                false ->
+                                    {ok, StatCode, Headers_1, [], Raw_req}
+                            end,
+                    State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format, Reply),
                     cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
                     State_2 = reset_state(State_1_1),
                     State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
@@ -1319,7 +1361,8 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                          tmp_file_name = TmpFilename,
                          tmp_file_fd = Fd,
                          options       = Options,
-                         timer_ref     = ReqTimer
+                         timer_ref     = ReqTimer,
+                         raw_req       = Raw_req
                         },
                 #state{http_status_code = SCode,
                        status_line   = Status_line,
@@ -1340,18 +1383,25 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                            {file, TmpFilename}
                    end,
     {Resp_headers_1, Raw_headers_1} = maybe_add_custom_headers(RespHeaders, Raw_headers, Options),
+    Give_raw_req = get_value(return_raw_request, Options, false),
     Reply = case get_value(give_raw_headers, Options, false) of
-                true ->
+                true when Give_raw_req == false ->
                     {ok, Status_line, Raw_headers_1, ResponseBody};
+                true ->
+                    {ok, Status_line, Raw_headers_1, ResponseBody, Raw_req};
+                false when Give_raw_req == false ->
+                    {ok, SCode, Resp_headers_1, ResponseBody};
                 false ->
-                    {ok, SCode, Resp_headers_1, ResponseBody}
+                    {ok, SCode, Resp_headers_1, ResponseBody, Raw_req}
             end,
     State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),
     set_cur_request(State_1);
 handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                          response_format = Resp_format,
-                         options = Options, timer_ref = ReqTimer},
+                         options = Options, timer_ref = ReqTimer,
+                         raw_req  = Raw_req
+                        },
                 #state{http_status_code = SCode,
                        status_line      = Status_line,
                        raw_headers      = Raw_headers,
@@ -1360,11 +1410,16 @@ handle_response(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                       } = State) ->
     Body = RepBuf,
     {Resp_headers_1, Raw_headers_1} = maybe_add_custom_headers(Resp_headers, Raw_headers, Options),
+    Give_raw_req = get_value(return_raw_request, Options, false),
     Reply = case get_value(give_raw_headers, Options, false) of
-                true ->
+                true when Give_raw_req == false ->
                     {ok, Status_line, Raw_headers_1, Body};
+                true ->
+                    {ok, Status_line, Raw_headers_1, Body, Raw_req};
+                false when Give_raw_req == false ->
+                    {ok, SCode, Resp_headers_1, Body};
                 false ->
-                    {ok, SCode, Resp_headers_1, Body}
+                    {ok, SCode, Resp_headers_1, Body, Raw_req}
             end,
     State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
     cancel_timer(ReqTimer, {eat_message, {req_timedout, From}}),

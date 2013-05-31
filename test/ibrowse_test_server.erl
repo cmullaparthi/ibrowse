@@ -15,7 +15,8 @@
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
-                  register(server_proc_name(Port), self()),
+                  Name = server_proc_name(Port),
+                  register(Name, self()),
                   case do_listen(Sock_type, Port, [{active, false},
                                                    {reuseaddr, true},
                                                    {nodelay, true},
@@ -30,7 +31,8 @@ start_server(Port, Sock_type) ->
                                 "Failed to start server on port ~p. ~p~n",
                                 [Port, Err]))),
                           exit({listen_error, Err})
-                  end
+                  end,
+                  unregister(Name)
           end,
     spawn_link(Fun).
 

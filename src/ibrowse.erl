@@ -289,7 +289,8 @@ send_req(Url, Headers, Method, Body) ->
 %%          {give_raw_headers, boolean()}      |
 %%          {preserve_chunked_encoding,boolean()}     |
 %%          {workaround, head_response_with_body}     |
-%%          {worker_process_options, list()}
+%%          {worker_process_options, list()} |
+%%          {return_raw_request, true}
 %%
 %% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()
@@ -451,6 +452,13 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
             case get_value(response_format, Options, list) of
                 list ->
                     {ok, St_code, Headers, binary_to_list(Body)};
+                binary ->
+                    Ret
+            end;
+        {ok, St_code, Headers, Body, Req} = Ret when is_binary(Body) ->
+            case get_value(response_format, Options, list) of
+                list ->
+                    {ok, St_code, Headers, binary_to_list(Body), Req};
                 binary ->
                     Ret
             end;
