@@ -87,6 +87,8 @@
          send_req_direct/6,
          send_req_direct/7,
          stream_next/1,
+         send_chunk/2,
+         send_done/1,
          stream_close/1,
          set_max_sessions/3,
          set_max_pipeline_size/3,
@@ -551,6 +553,24 @@ stream_next(Req_id) ->
             {error, unknown_req_id};
         [{_, Pid}] ->
             catch Pid ! {stream_next, Req_id},
+            ok
+    end.
+
+send_chunk(Req_id, Data) ->
+    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+        [] ->
+            {error, unknown_req_id};
+        [{_, Pid}] ->
+            catch Pid ! {send_chunk, Req_id, Data},
+            ok
+    end.
+
+send_done(Req_id) ->
+    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+        [] ->
+            {error, unknown_req_id};
+        [{_, Pid}] ->
+            catch Pid ! {send_done, Req_id},
             ok
     end.
 
