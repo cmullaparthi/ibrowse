@@ -27,7 +27,13 @@
          test_head_transfer_encoding/0,
          test_head_transfer_encoding/1,
          test_head_response_with_body/0,
-         test_head_response_with_body/1
+         test_head_response_with_body/1,
+         i_do_streaming_request/4,
+         i_do_streaming_request2/2,
+         test_put_request/0,
+         test_put_request/1,
+         test_put_request_chunked/0,
+         test_put_request_chunked/1
 	]).
 
 test_stream_once(Url, Method, Options) ->
@@ -233,7 +239,9 @@ dump_errors(Key, Iod) ->
                     {local_test_fun, test_20122010, []},
                     {local_test_fun, test_pipeline_head_timeout, []},
                     {local_test_fun, test_head_transfer_encoding, []},
-                    {local_test_fun, test_head_response_with_body, []}
+                    {local_test_fun, test_head_response_with_body, []},
+                    {local_test_fun, test_put_request, []},
+                    {local_test_fun, test_put_request_chunked, []}
 		   ]).
 
 unit_tests() ->
@@ -283,13 +291,13 @@ verify_chunked_streaming(Options) ->
 				 [{response_format, binary} | Options]),
     io:format("  Fetching data with streaming as list...~n", []),
     Async_response_list = do_async_req_list(
-			    Url, get, [{response_format, list} | Options]),
+			    Url, get, i_do_async_req_list, [{response_format, list} | Options]),
     io:format("  Fetching data with streaming as binary...~n", []),
     Async_response_bin = do_async_req_list(
-			   Url, get, [{response_format, binary} | Options]),
+			   Url, get, i_do_async_req_list, [{response_format, binary} | Options]),
     io:format("  Fetching data with streaming as binary, {active, once}...~n", []),
     Async_response_bin_once = do_async_req_list(
-                                Url, get, [once, {response_format, binary} | Options]),
+                                Url, get, i_do_async_req_list, [once, {response_format, binary} | Options]),
     Res1 = compare_responses(Result_without_streaming, Async_response_list, Async_response_bin),
     Res2 = compare_responses(Result_without_streaming, Async_response_list, Async_response_bin_once),
     case {Res1, Res2} of
@@ -307,7 +315,7 @@ test_chunked_streaming_once(Options) ->
     Url = "http://www.httpwatch.com/httpgallery/chunked/",
     io:format("  URL: ~s~n", [Url]),
     io:format("  Fetching data with streaming as binary, {active, once}...~n", []),
-    case do_async_req_list(Url, get, [once, {response_format, binary} | Options]) of
+    case do_async_req_list(Url, get, i_do_async_req_list, [once, {response_format, binary} | Options]) of
         {ok, _, _, _} ->
             io:format("  Success!~n", []);
         Err ->
@@ -344,8 +352,8 @@ compare_responses(R1, R2, R3) ->
 %%     do_async_req_list(Url, Method, [{stream_to, self()},
 %% 				    {stream_chunk_size, 1000}]).
 
-do_async_req_list(Url, Method, Options) ->
-    {Pid,_} = erlang:spawn_monitor(?MODULE, i_do_async_req_list,
+do_async_req_list(Url, Method, Fun, Options) ->
+    {Pid,_} = erlang:spawn_monitor(?MODULE, Fun,
 				   [self(), Url, Method, 
 				    Options ++ [{stream_chunk_size, 1000}]]),
 %%    io:format("Spawned process ~p~n", [Pid]),
@@ -414,6 +422,26 @@ maybe_stream_next(Req_id, Options) ->
         false ->
             ok
     end.
+
+i_do_streaming_request(Parent, Url, Method, Options) ->
+    {Headers, Options_1} = case lists:member(chunked, Options) of
+        true -> {[], [{transfer_encoding, chunked} | (Options -- [chunked])]};
+        false -> {[{"Content-Length", "6"}], Options}
+    end,
+    Res = ibrowse:send_req(Url, Headers, Method, <<"">>, 
+                           [{stream_to, self()} | Options_1]),
+    case Res of
+	{ibrowse_req_id, Req_id} ->
+	    Result = i_do_streaming_request2(Req_id, Options),
+	    Parent ! {async_result, self(), Result};
+	Err ->
+	    Parent ! {async_result, self(), Err}
+    end.
+i_do_streaming_request2(Req_id, Options) ->
+    ibrowse:send_chunk(Req_id, <<"aaa">>),
+    ibrowse:send_chunk(Req_id, <<"bbb">>),
+    ibrowse:send_done(Req_id),
+    wait_for_async_resp(Req_id, Options, undefined, undefined, []).
 
 execute_req(local_test_fun, Method, Args) ->
     io:format("     ~-54.54w: ", [Method]),
@@ -623,3 +651,29 @@ do_trace(true, Fmt, Args) ->
     io:format("~s -- " ++ Fmt, [ibrowse_lib:printable_date() | Args]);
 do_trace(_, _, _) ->
     ok.
+
+test_put_request() ->
+    clear_msg_q(),
+    test_put_request("http://localhost:8181/ibrowse_put_request").
+
+test_put_request(Url) ->
+    case do_async_req_list(Url, put, i_do_streaming_request,
+            [{stream_request, true}]) of
+        {ok, "204", _, _} ->
+            io:format("  Success!~n", []);
+        Err ->
+            io:format("  Fail: ~p~n", [Err])
+    end.
+
+test_put_request_chunked() ->
+    clear_msg_q(),
+    test_put_request_chunked("http://localhost:8181/ibrowse_put_request").
+
+test_put_request_chunked(Url) ->
+    case do_async_req_list(Url, put, i_do_streaming_request,
+            [chunked, {stream_request, true}]) of
+        {ok, "204", _, _} ->
+            io:format("  Success!~n", []);
+        Err ->
+            io:format("  Fail: ~p~n", [Err])
+    end.
