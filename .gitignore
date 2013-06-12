@@ -2,4 +2,7 @@ ebin/
 *~
 .eunit/
 *beam
-docs/*
+doc/*.html
+doc/*.css
+doc/*.png
+doc/edoc-info
