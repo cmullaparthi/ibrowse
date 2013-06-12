@@ -481,7 +481,7 @@ spawn_worker_process(Args) ->
     spawn_worker_process(Args, []).
 
 %% @doc Same as spawn_worker_process/1 except with Erlang process options.
-%% @spec spawn_worker_process(Url::string() | {Host::string(), Port::integer(), Options::list()) -> {ok, pid()}
+%% @spec spawn_worker_process(Host::string(), Port::integer()) -> {ok, pid()}
 spawn_worker_process(Host, Port) when is_list(Host), is_integer(Port) ->
     %% Convert old API calls to new API format.
     spawn_worker_process({Host, Port}, []);
@@ -495,7 +495,7 @@ spawn_link_worker_process(Args) ->
     spawn_link_worker_process(Args, []).
 
 %% @doc Same as spawn_link_worker_process/1 except with Erlang process options.
-%% @spec spawn_link_worker_process(Url::string() | {Host::string(), Port::integer(), Options::list()) -> {ok, pid()}
+%% @spec spawn_link_worker_process(Host::string(), Port::integer()) -> {ok, pid()}
 spawn_link_worker_process(Host, Port) when is_list(Host), is_integer(Port) ->
     %% Convert old API calls to new API format.
     spawn_link_worker_process({Host, Port}, []);
