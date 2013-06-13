@@ -19,3 +19,7 @@ test: all
 
 xref: all
 	./rebar xref
+
+docs:
+	erl -noshell \
+		-eval 'edoc:application(ibrowse, ".", []), init:stop().'
