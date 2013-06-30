@@ -1,4 +1,4 @@
--module(ibrowser_socks5).
+-module(ibrowse_socks5).
 
 -include_lib("kernel/src/inet_dns.hrl").
 

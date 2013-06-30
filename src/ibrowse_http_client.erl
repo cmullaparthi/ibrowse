@@ -507,7 +507,7 @@ do_connect(Host, Port, Options, _State, Timeout) ->
       undefined ->
         gen_tcp:connect(Host, Port, get_sock_options(Host, Options, []), Timeout);
       _ ->
-        catch ibrowser_socks5:connect(Host, Port, Options)
+        catch ibrowse_socks5:connect(Host, Port, Options)
     end.
 
 get_sock_options(Host, Options, SSLOptions) ->
