@@ -27,6 +27,7 @@ ibrowse is a HTTP client written in erlang.
 *  Asynchronous requests. Responses are streamed to a process
 *  Basic authentication
 *  Supports proxy authentication
+*  Supports socks5
 *  Can talk to secure webservers using SSL
 *  *Any other features in the code not listed here :)*
 
@@ -278,4 +279,18 @@ support this. Nor did www.google.com. But good old BBC supports this:
       "BBC-UID=7452e72a..."},
      {"Via","1.1 hatproxy01 (NetCache NetApp/5.6.2)"}],
     "TRACE / HTTP/1.1\r\nHost: www.bbc.co.uk\r\nConnection: keep-alive\r\nX-Forwarded-For: 172.24.28.29\r\nVia: 1.1 hatproxy01 (NetCache NetApp/5.6.2)\r\nCookie: BBC-UID=7452e...\r\n\r\n"}
+```
+
+A `GET` using a socks5:
+
+```erlang
+ibrowse:send_req("http://google.com", [], get, [],
+  [{socks5_host, "127.0.0.1"},
+  {socks5_port, 5335}]).
+
+ibrowse:send_req("http://google.com", [], get, [],
+  [{socks5_host, "127.0.0.1"},
+  {socks5_port, 5335},
+  {socks5_user, "user4321"},
+  {socks5_pass, "pass7654"}]).
 ```
