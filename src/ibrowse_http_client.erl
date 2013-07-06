@@ -1091,7 +1091,8 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     parse_response(Data_1, State_1#state{recvd_headers = [],
                                                          status = get_header});
                 _ when StatCode =:= "204";
-                       StatCode =:= "304" ->
+                       StatCode =:= "304";
+                       StatCode =:= "303" ->
                     %% No message body is expected for these Status Codes.
                     %% RFC2616 - Sec 4.4
                     {_, Reqs_1} = queue:out(Reqs),
