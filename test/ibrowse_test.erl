@@ -27,7 +27,11 @@
          test_head_transfer_encoding/0,
          test_head_transfer_encoding/1,
          test_head_response_with_body/0,
-         test_head_response_with_body/1
+         test_head_response_with_body/1,
+         test_303_response_with_no_body/0,
+         test_303_response_with_no_body/1,
+         test_303_response_with_a_body/0,
+         test_303_response_with_a_body/1
 	]).
 
 test_stream_once(Url, Method, Options) ->
@@ -233,7 +237,9 @@ dump_errors(Key, Iod) ->
                     {local_test_fun, test_20122010, []},
                     {local_test_fun, test_pipeline_head_timeout, []},
                     {local_test_fun, test_head_transfer_encoding, []},
-                    {local_test_fun, test_head_response_with_body, []}
+                    {local_test_fun, test_head_response_with_body, []},
+                    {local_test_fun, test_303_response_with_a_body, []}
+
 		   ]).
 
 unit_tests() ->
@@ -471,6 +477,37 @@ test_head_response_with_body() ->
 test_head_response_with_body(Url) ->
     case ibrowse:send_req(Url, [], head, [], [{workaround, head_response_with_body}]) of
         {ok, "400", _, _} ->
+            success;
+        Res ->
+            {test_failed, Res}
+    end.
+
+%%------------------------------------------------------------------------------
+%% Test what happens when a 303 response has no body
+%% Github issue #97 
+%% ------------------------------------------------------------------------------
+test_303_response_with_no_body() ->
+    clear_msg_q(),
+    test_303_response_with_no_body("http://localhost:8181/ibrowse_303_no_body_test").
+
+test_303_response_with_no_body(Url) ->
+    ibrowse:add_config([{allow_303_with_no_body, true}]),
+    case ibrowse:send_req(Url, [], post) of
+        {ok, "303", _, _} ->
+            success;
+        Res ->
+            {test_failed, Res}
+    end.
+
+%% Make sure we don't break requests that do have a body.
+test_303_response_with_a_body() ->
+    clear_msg_q(),
+    test_303_response_with_no_body("http://localhost:8181/ibrowse_303_with_body_test").
+
+test_303_response_with_a_body(Url) ->
+    ibrowse:add_config([{allow_303_with_no_body, true}]),
+    case ibrowse:send_req(Url, [], post) of
+        {ok, "303", _, "abcde"} ->
             success;
         Res ->
             {test_failed, Res}

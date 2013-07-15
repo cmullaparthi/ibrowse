@@ -1091,8 +1091,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     parse_response(Data_1, State_1#state{recvd_headers = [],
                                                          status = get_header});
                 _ when StatCode =:= "204";
-                       StatCode =:= "304";
-                       StatCode =:= "303" ->
+                       StatCode =:= "304" ->
                     %% No message body is expected for these Status Codes.
                     %% RFC2616 - Sec 4.4
                     {_, Reqs_1} = queue:out(Reqs),
@@ -1121,6 +1120,25 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                                ConnClose =:= "close" ->
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1#state{reply_buffer = Data_1};
+                undefined when StatCode =:= "303" ->
+                    %% Some servers send 303 requests without a body.
+                    %% RFC2616 says that they SHOULD, but they dont.
+                    case ibrowse:get_config_value(allow_303_with_no_body, false) of
+                      false -> 
+                        fail_pipelined_requests(State_1,
+                                            {error, {content_length_undefined,
+                                                     {stat_code, StatCode}, Headers}}),
+                       {error, content_length_undefined};
+                      true -> 
+                        {_, Reqs_1} = queue:out(Reqs),
+                        send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
+                        State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
+                                             {ok, StatCode, Headers_1, []}),
+                        cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
+                        State_2 = reset_state(State_1_1),
+                        State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
+                        parse_response(Data_1, State_3)
+                    end;
                 undefined ->
                     fail_pipelined_requests(State_1,
                                             {error, {content_length_undefined,
