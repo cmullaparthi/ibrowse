@@ -1051,7 +1051,9 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                                             http_status_code=StatCode}
                       end,
             put(conn_close, ConnClose),
-            TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
+            TransferEncodings = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
+            IsChunked = lists:any(fun(Enc) -> string:strip(Enc) =:= "chunked" end,
+                                  string:tokens(TransferEncodings, ",")),
             Head_response_with_body = lists:member({workaround, head_response_with_body}, Options),
             case get_value("content-length", LCHeaders, undefined) of
                 _ when Method == connect,
@@ -1102,7 +1104,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     State_2 = reset_state(State_1_1),
                     State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
                     parse_response(Data_1, State_3);
-                _ when TransferEncoding =:= "chunked" ->
+                _ when IsChunked ->
                     do_trace("Chunked encoding detected...~n",[]),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     case parse_11_response(Data_1, State_1#state{transfer_encoding=chunked,
