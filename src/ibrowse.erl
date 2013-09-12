@@ -443,6 +443,8 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
             {error, sel_conn_closed};
         {'EXIT', {normal, _}} ->
             {error, req_timedout};
+        {'EXIT', {connection_closed, _}} ->
+            {error, sel_conn_closed};
         {error, connection_closed} ->
             {error, sel_conn_closed};
         {'EXIT', Reason} ->
