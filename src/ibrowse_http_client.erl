@@ -215,11 +215,11 @@ handle_info({stream_close, _Req_id}, State) ->
 handle_info({tcp_closed, _Sock}, State) ->
     do_trace("TCP connection closed by peer!~n", []),
     handle_sock_closed(State),
-    {stop, normal, State};
+    {stop, connection_closed, State};
 handle_info({ssl_closed, _Sock}, State) ->
     do_trace("SSL connection closed by peer!~n", []),
     handle_sock_closed(State),
-    {stop, normal, State};
+    {stop, connection_closed, State};
 
 handle_info({tcp_error, _Sock, Reason}, State) ->
     do_trace("Error on connection to ~1000.p:~1000.p -> ~1000.p~n",
