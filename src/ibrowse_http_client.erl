@@ -215,11 +215,11 @@ handle_info({stream_close, _Req_id}, State) ->
 handle_info({tcp_closed, _Sock}, State) ->
     do_trace("TCP connection closed by peer!~n", []),
     handle_sock_closed(State),
-    {stop, normal, State};
+    {stop, connection_closed, State};
 handle_info({ssl_closed, _Sock}, State) ->
     do_trace("SSL connection closed by peer!~n", []),
     handle_sock_closed(State),
-    {stop, normal, State};
+    {stop, connection_closed, State};
 
 handle_info({tcp_error, _Sock, Reason}, State) ->
     do_trace("Error on connection to ~1000.p:~1000.p -> ~1000.p~n",
@@ -502,7 +502,13 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
            Timeout) ->
     ssl:connect(Host, Port, get_sock_options(Host, Options, SSLOptions), Timeout);
 do_connect(Host, Port, Options, _State, Timeout) ->
-    gen_tcp:connect(Host, Port, get_sock_options(Host, Options, []), Timeout).
+    Socks5Host = get_value(socks5_host, Options, undefined),
+    case Socks5Host of
+      undefined ->
+        gen_tcp:connect(Host, Port, get_sock_options(Host, Options, []), Timeout);
+      _ ->
+        catch ibrowse_socks5:connect(Host, Port, Options)
+    end.
 
 get_sock_options(Host, Options, SSLOptions) ->
     Caller_socket_options = get_value(socket_options, Options, []),
@@ -1045,7 +1051,9 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                                             http_status_code=StatCode}
                       end,
             put(conn_close, ConnClose),
-            TransferEncoding = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
+            TransferEncodings = to_lower(get_value("transfer-encoding", LCHeaders, "false")),
+            IsChunked = lists:any(fun(Enc) -> string:strip(Enc) =:= "chunked" end,
+                                  string:tokens(TransferEncodings, ",")),
             Head_response_with_body = lists:member({workaround, head_response_with_body}, Options),
             case get_value("content-length", LCHeaders, undefined) of
                 _ when Method == connect,
@@ -1096,7 +1104,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     State_2 = reset_state(State_1_1),
                     State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
                     parse_response(Data_1, State_3);
-                _ when TransferEncoding =:= "chunked" ->
+                _ when IsChunked ->
                     do_trace("Chunked encoding detected...~n",[]),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     case parse_11_response(Data_1, State_1#state{transfer_encoding=chunked,
