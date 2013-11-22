@@ -1,5 +1,8 @@
 IBROWSE_VSN = $(shell sed -n 's/.*{vsn,.*"\(.*\)"}.*/\1/p' src/ibrowse.app.src)
 
+DIALYZER_PLT=$(CURDIR)/.dialyzer_plt
+DIALYZER_APPS=erts kernel stdlib ssl crypto public_key asn1 compiler hipe edoc gs syntax_tools inets xmerl runtime_tools mnesia
+
 all:
 	./rebar compile
 
@@ -23,3 +26,15 @@ xref: all
 docs:
 	erl -noshell \
 		-eval 'edoc:application(ibrowse, ".", []), init:stop().'
+
+$(DIALYZER_PLT):
+	@echo Creating dialyzer plt file: $(DIALYZER_PLT)
+	@echo This may take a minute or two...
+	@echo
+	dialyzer --output_plt $(DIALYZER_PLT) --build_plt \
+	   --apps $(DIALYZER_APPS)
+
+dialyzer: $(DIALYZER_PLT)
+	@echo Running dialyzer...
+	@echo
+	dialyzer --fullpath --plt $(DIALYZER_PLT) -Wrace_conditions -Wunmatched_returns -Werror_handling -r ./ebin
