@@ -8,3 +8,4 @@ doc/*.png
 doc/edoc-info
 Emakefile
 *.bat
+.dialyzer_plt
