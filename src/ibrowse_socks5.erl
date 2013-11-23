@@ -22,6 +22,7 @@ connect(Host, Port, Options) ->
 
     {ok, Socket} = gen_tcp:connect(Socks5Host, Socks5Port, [binary, {packet, 0}, {keepalive, true}, {active, false}]),
 
+    {ok, _Bin} =
     case proplists:get_value(socks5_user, Options, undefined) of
         undefined ->
             ok = gen_tcp:send(Socket, <<?SOCKS5, 1, ?AUTH_METHOD_NO>>),
