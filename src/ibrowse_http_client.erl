@@ -194,7 +194,7 @@ handle_info({ssl, _Sock, Data}, State) ->
 
 handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
-    do_setopts(Socket, [{active, once}], State),
+    ok = do_setopts(Socket, [{active, once}], State),
     {noreply, set_inac_timer(State)};
 
 handle_info({stream_next, _Req_id}, State) ->
@@ -297,7 +297,7 @@ handle_sock_data(Data, #state{status = get_header}=State) ->
         #state{socket = Socket, status = Status, cur_req = CurReq} = State_1 ->
             case {Status, CurReq} of
                 {get_header, #request{caller_controls_socket = true}} ->
-                    do_setopts(Socket, [{active, once}], State_1);
+                    ok = do_setopts(Socket, [{active, once}], State_1);
                 _ ->
                     active_once(State_1)
             end,
@@ -336,7 +336,7 @@ handle_sock_data(Data, #state{status           = get_body,
                         true ->
                             active_once(State_1);
                         false when Ccs == true ->
-                            do_setopts(Socket, [{active, once}], State);
+                            ok = do_setopts(Socket, [{active, once}], State);
                         false ->
                             active_once(State_1)
                     end,
@@ -579,16 +579,15 @@ do_send_body1(Source, Resp, State, TE) ->
                 {ok, Data} when Data == []; Data == <<>> ->
                         do_send_body({Source}, State, TE);
         {ok, Data} ->
-            do_send(maybe_chunked_encode(Data, TE), State),
+            ok = do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source}, State, TE);
                 {ok, Data, New_source_state} when Data == []; Data == <<>> ->
                         do_send_body({Source, New_source_state}, State, TE);
         {ok, Data, New_source_state} ->
-            do_send(maybe_chunked_encode(Data, TE), State),
+            ok = do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source, New_source_state}, State, TE);
         eof when TE == true ->
-            do_send(<<"0\r\n\r\n">>, State),
-            ok;
+            ok = do_send(<<"0\r\n\r\n">>, State);
         eof ->
             ok;
         Err ->
@@ -612,7 +611,7 @@ do_close(#state{socket = Sock, is_ssl = false}) ->  catch gen_tcp:close(Sock).
 active_once(#state{cur_req = #request{caller_controls_socket = true}}) ->
     ok;
 active_once(#state{socket = Socket} = State) ->
-    do_setopts(Socket, [{active, once}], State).
+    ok = do_setopts(Socket, [{active, once}], State).
 
 do_setopts(_Sock, [],   _)    ->  ok;
 do_setopts(Sock, Opts, #state{is_ssl = true,
@@ -703,7 +702,7 @@ send_req_1(From,
             case do_send_body(Body_1, State_1, TE) of
                 ok ->
                     trace_request_body(Body_1),
-                    active_once(State_1),
+                    ok = active_once(State_1),
                     State_1_1 = inc_pipeline_counter(State_1),
                     State_2 = State_1_1#state{status     = get_header,
                                               cur_req    = NewReq,
@@ -786,7 +785,7 @@ send_req_1(From,
                                  AbsPath, RelPath, Body, Options, State_1,
                                  ReqId),
     trace_request(Req),
-    do_setopts(Socket, Caller_socket_options, State_1),
+    ok = do_setopts(Socket, Caller_socket_options, State_1),
     TE = is_chunked_encoding_specified(Options),
     case do_send(Req, State_1) of
         ok ->
@@ -1401,7 +1400,7 @@ set_cur_request(#state{reqs = Reqs, socket = Socket} = State) ->
         {value, #request{caller_controls_socket = Ccs} = NextReq} ->
             case Ccs of
                 true ->
-                    do_setopts(Socket, [{active, once}], State);
+                    ok = do_setopts(Socket, [{active, once}], State);
                 _ ->
                     ok
             end,
@@ -1858,7 +1857,8 @@ dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
     try
         update_counter(Tid, self(), {2,-1,0,0}),
-        update_counter(Tid, self(), {3,-1,0,0})
+        update_counter(Tid, self(), {3,-1,0,0}),
+        ok
     catch
         _:_ ->
             ok

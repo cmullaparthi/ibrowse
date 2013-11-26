@@ -3,13 +3,15 @@ IBROWSE_VSN = $(shell sed -n 's/.*{vsn,.*"\(.*\)"}.*/\1/p' src/ibrowse.app.src)
 DIALYZER_PLT=$(CURDIR)/.dialyzer_plt
 DIALYZER_APPS=erts kernel stdlib ssl crypto public_key asn1 compiler hipe edoc gs syntax_tools inets xmerl runtime_tools mnesia
 
-all:
+all: compile dialyzer
+
+compile:
 	./rebar compile
 
 clean:
 	./rebar clean
 
-install: all
+install: compile
 	mkdir -p $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 	cp -r ebin $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 
