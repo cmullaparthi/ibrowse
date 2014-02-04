@@ -319,7 +319,7 @@ handle_sock_data(Data, #state{status           = get_body,
                                             {error, {Reason, {stat_code, StatCode}, Headers}}),
                     {stop, normal, State};
                 State_1 ->
-                    active_once(State_1),
+                    _ = active_once(State_1),
                     State_2 = set_inac_timer(State_1),
                     {noreply, State_2}
             end;
@@ -349,7 +349,7 @@ handle_sock_data(Data, #state{status           = get_body,
                         {noreply, set_inac_timer(State_2)}
                     end;
                 State_1 ->
-                    active_once(State_1),
+                    _ = active_once(State_1),
                     State_2 = set_inac_timer(State_1),
                     {noreply, State_2}
             end
@@ -794,7 +794,7 @@ send_req_1(From,
                 ok ->
                     trace_request_body(Body_1),
                     State_2 = inc_pipeline_counter(State_1),
-                    active_once(State_2),
+                    _ = active_once(State_2),
                     State_3 = case Status of
                                   idle ->
                                       State_2#state{status     = get_header,
@@ -1871,14 +1871,13 @@ dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
 dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
-    try
-        update_counter(Tid, self(), {2,-1,0,0}),
-        update_counter(Tid, self(), {3,-1,0,0}),
-        ok
-    catch
-        _:_ ->
-            ok
-    end,
+    _ = try
+	    update_counter(Tid, self(), {2,-1,0,0}),
+	    update_counter(Tid, self(), {3,-1,0,0})
+	catch
+	    _:_ ->
+		ok
+	end,
     State#state{cur_pipeline_size = Pipe_sz - 1}.
 
 flatten([H | _] = L) when is_integer(H) ->
