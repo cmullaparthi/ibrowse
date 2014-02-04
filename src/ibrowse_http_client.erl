@@ -194,7 +194,7 @@ handle_info({ssl, _Sock, Data}, State) ->
 
 handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
-    ok = do_setopts(Socket, [{active, once}], State),
+    _ = do_setopts(Socket, [{active, once}], State),
     {noreply, set_inac_timer(State)};
 
 handle_info({stream_next, _Req_id}, State) ->
@@ -295,12 +295,12 @@ handle_sock_data(Data, #state{status = get_header}=State) ->
             shutting_down(State),
             {stop, normal, State};
         #state{socket = Socket, status = Status, cur_req = CurReq} = State_1 ->
-            case {Status, CurReq} of
-                {get_header, #request{caller_controls_socket = true}} ->
-                    ok = do_setopts(Socket, [{active, once}], State_1);
-                _ ->
-                    active_once(State_1)
-            end,
+            _ = case {Status, CurReq} of
+		    {get_header, #request{caller_controls_socket = true}} ->
+			do_setopts(Socket, [{active, once}], State_1);
+		    _ ->
+			active_once(State_1)
+		end,
             {noreply, set_inac_timer(State_1)}
     end;
 
@@ -332,14 +332,14 @@ handle_sock_data(Data, #state{status           = get_body,
                     {stop, normal, State};
                 #state{cur_req = #request{caller_controls_socket = Ccs},
                        interim_reply_sent = Irs} = State_1 ->
-                    case Irs of
-                        true ->
-                            active_once(State_1);
-                        false when Ccs == true ->
-                            ok = do_setopts(Socket, [{active, once}], State);
-                        false ->
-                            active_once(State_1)
-                    end,
+                    _ = case Irs of
+			    true ->
+				active_once(State_1);
+			    false when Ccs == true ->
+				do_setopts(Socket, [{active, once}], State);
+			    false ->
+				active_once(State_1)
+			end,
                     State_2 = State_1#state{interim_reply_sent = false},
                     case Ccs of
                     true ->
@@ -579,15 +579,16 @@ do_send_body1(Source, Resp, State, TE) ->
                 {ok, Data} when Data == []; Data == <<>> ->
                         do_send_body({Source}, State, TE);
         {ok, Data} ->
-            ok = do_send(maybe_chunked_encode(Data, TE), State),
+            _ = do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source}, State, TE);
                 {ok, Data, New_source_state} when Data == []; Data == <<>> ->
                         do_send_body({Source, New_source_state}, State, TE);
         {ok, Data, New_source_state} ->
-            ok = do_send(maybe_chunked_encode(Data, TE), State),
+            _ = do_send(maybe_chunked_encode(Data, TE), State),
             do_send_body({Source, New_source_state}, State, TE);
         eof when TE == true ->
-            ok = do_send(<<"0\r\n\r\n">>, State);
+            _ = do_send(<<"0\r\n\r\n">>, State),
+	    ok;
         eof ->
             ok;
         Err ->
@@ -611,7 +612,7 @@ do_close(#state{socket = Sock, is_ssl = false}) ->  catch gen_tcp:close(Sock).
 active_once(#state{cur_req = #request{caller_controls_socket = true}}) ->
     ok;
 active_once(#state{socket = Socket} = State) ->
-    ok = do_setopts(Socket, [{active, once}], State).
+    _ = do_setopts(Socket, [{active, once}], State).
 
 do_setopts(_Sock, [],   _)    ->  ok;
 do_setopts(Sock, Opts, #state{is_ssl = true,
@@ -702,7 +703,7 @@ send_req_1(From,
             case do_send_body(Body_1, State_1, TE) of
                 ok ->
                     trace_request_body(Body_1),
-                    ok = active_once(State_1),
+                    _ = active_once(State_1),
                     State_1_1 = inc_pipeline_counter(State_1),
                     State_2 = State_1_1#state{status     = get_header,
                                               cur_req    = NewReq,
@@ -785,7 +786,7 @@ send_req_1(From,
                                  AbsPath, RelPath, Body, Options, State_1,
                                  ReqId),
     trace_request(Req),
-    ok = do_setopts(Socket, Caller_socket_options, State_1),
+    _ = do_setopts(Socket, Caller_socket_options, State_1),
     TE = is_chunked_encoding_specified(Options),
     case do_send(Req, State_1) of
         ok ->
@@ -1417,12 +1418,8 @@ set_cur_request(#state{reqs = Reqs, socket = Socket} = State) ->
         empty ->
             State#state{cur_req = undefined};
         {value, #request{caller_controls_socket = Ccs} = NextReq} ->
-            case Ccs of
-                true ->
-                    ok = do_setopts(Socket, [{active, once}], State);
-                _ ->
-                    ok
-            end,
+            _ = Ccs =:= true
+		andalso do_setopts(Socket, [{active, once}], State),
             State#state{cur_req = NextReq}
     end.
 
