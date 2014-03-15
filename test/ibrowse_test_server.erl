@@ -161,6 +161,18 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_head_test"}}) ->
     Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nTransfer-Encoding: chunked\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp);
+process_request(Sock, Sock_type,
+                #request{method='POST',
+                         headers = _Headers,
+                         uri = {abs_path, "/ibrowse_303_no_body_test"}}) ->
+    Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\n">>,
+    do_send(Sock, Sock_type, Resp);
+process_request(Sock, Sock_type,
+                #request{method='POST',
+                         headers = _Headers,
+                         uri = {abs_path, "/ibrowse_303_with_body_test"}}) ->
+    Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\nContent-Length: 5\r\n\r\nabcde">>,
+    do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,

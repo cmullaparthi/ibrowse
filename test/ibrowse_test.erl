@@ -27,7 +27,12 @@
          test_head_transfer_encoding/0,
          test_head_transfer_encoding/1,
          test_head_response_with_body/0,
-         test_head_response_with_body/1
+         test_head_response_with_body/1,
+         test_303_response_with_no_body/0,
+         test_303_response_with_no_body/1,
+         test_303_response_with_a_body/0,
+         test_303_response_with_a_body/1,
+         test_generate_body_0/0
 	]).
 
 test_stream_once(Url, Method, Options) ->
@@ -233,7 +238,9 @@ dump_errors(Key, Iod) ->
                     {local_test_fun, test_20122010, []},
                     {local_test_fun, test_pipeline_head_timeout, []},
                     {local_test_fun, test_head_transfer_encoding, []},
-                    {local_test_fun, test_head_response_with_body, []}
+                    {local_test_fun, test_head_response_with_body, []},
+                    {local_test_fun, test_303_response_with_a_body, []}
+
 		   ]).
 
 unit_tests() ->
@@ -477,6 +484,37 @@ test_head_response_with_body(Url) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% Test what happens when a 303 response has no body
+%% Github issue #97 
+%% ------------------------------------------------------------------------------
+test_303_response_with_no_body() ->
+    clear_msg_q(),
+    test_303_response_with_no_body("http://localhost:8181/ibrowse_303_no_body_test").
+
+test_303_response_with_no_body(Url) ->
+    ibrowse:add_config([{allow_303_with_no_body, true}]),
+    case ibrowse:send_req(Url, [], post) of
+        {ok, "303", _, _} ->
+            success;
+        Res ->
+            {test_failed, Res}
+    end.
+
+%% Make sure we don't break requests that do have a body.
+test_303_response_with_a_body() ->
+    clear_msg_q(),
+    test_303_response_with_no_body("http://localhost:8181/ibrowse_303_with_body_test").
+
+test_303_response_with_a_body(Url) ->
+    ibrowse:add_config([{allow_303_with_no_body, true}]),
+    case ibrowse:send_req(Url, [], post) of
+        {ok, "303", _, "abcde"} ->
+            success;
+        Res ->
+            {test_failed, Res}
+    end.
+
+%%------------------------------------------------------------------------------
 %% Test what happens when the request at the head of a pipeline times out
 %%------------------------------------------------------------------------------
 test_pipeline_head_timeout() ->
@@ -614,6 +652,46 @@ do_test_20122010_1(Expected_resp, Req_id, Acc) ->
             Result
     after 1000 ->
             exit({timeout, test_failed})
+    end.
+
+%%------------------------------------------------------------------------------
+%% Test requests where body is generated using a Fun
+%%------------------------------------------------------------------------------
+test_generate_body_0() ->
+    io:format("Testing that generation of body using fun works...~n", []),
+    Tid = ets:new(ibrowse_test_state, [public]),
+    try
+        Body_1 = <<"Part 1 of the body">>,
+        Body_2 = <<"Part 2 of the body\r\n\r\n">>,
+        Size = size(Body_1) + size(Body_2),
+        Body = list_to_binary([Body_1, Body_2]),
+        Fun = fun() ->
+                      case ets:lookup(Tid, body_gen_state) of
+                          [] ->
+                              ets:insert(Tid, {body_gen_state, 1}),
+                              {ok, Body_1};
+                          [{_, 1}]->
+                              ets:insert(Tid, {body_gen_state, 2}),
+                              {ok, Body_2};
+                          [{_, 2}] ->
+                              eof
+                      end
+              end,
+        case ibrowse:send_req("http://localhost:8181/echo_body",
+                              [{"Content-Length", Size}],
+                              post,
+                              Fun,
+                              [{response_format, binary},
+                               {http_vsn, {1,0}}]) of
+            {ok, "200", _, Body} ->
+                io:format("    Success~n", []),
+                success;
+            Err ->
+                io:format("Test failed : ~p~n", [Err]),
+                {test_failed, Err}
+        end
+    after
+        ets:delete(Tid)
     end.
 
 do_trace(Fmt, Args) ->

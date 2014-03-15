@@ -6,7 +6,7 @@
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
 %% @author Chandrashekhar Mullaparthi <chandrashekhar dot mullaparthi at gmail dot com>
-%% @copyright 2005-2012 Chandrashekhar Mullaparthi
+%% @copyright 2005-2014 Chandrashekhar Mullaparthi
 %% @doc The ibrowse application implements an HTTP 1.1 client in erlang. This
 %% module implements the API of the HTTP client. There is one named
 %% process called 'ibrowse' which assists in load balancing and maintaining configuration. There is one load balancing process per unique webserver. There is
@@ -158,7 +158,7 @@ stop() ->
 %% respHeader() = {headerName(), headerValue()}
 %% headerName() = string()
 %% headerValue() = string()
-%% response() = {ok, Status, ResponseHeaders, ResponseBody} | {ibrowse_req_id, req_id() } | {error, Reason}
+%% response() = {ok, Status, ResponseHeaders, ResponseBody} | {ok, Status, ResponseHeaders, ResponseBody} | {ibrowse_req_id, req_id() } | {error, Reason}
 %% req_id() = term()
 %% ResponseBody = string() | {file, Filename}
 %% Reason = term()
@@ -255,6 +255,8 @@ send_req(Url, Headers, Method, Body) ->
 %% <li> The <code>preserve_chunked_encoding</code> option enables the caller
 %% to receive the raw data stream when the Transfer-Encoding of the server
 %% response is Chunked.
+%% </li>
+%% <li> The <code>return_raw_request</code> option enables the caller to get the exact request which was sent by ibrowse to the server, along with the response. When this option is used, the response for synchronous requests is a 5-tuple instead of the usual 4-tuple. For asynchronous requests, the calling process gets a message <code>{ibrowse_async_raw_req, Raw_req}</code>. 
 %% </li>
 %% </ul>
 %%

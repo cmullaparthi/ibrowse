@@ -194,7 +194,7 @@ handle_info({ssl, _Sock, Data}, State) ->
 
 handle_info({stream_next, Req_id}, #state{socket = Socket,
                                           cur_req = #request{req_id = Req_id}} = State) ->
-    do_setopts(Socket, [{active, once}], State),
+    ok = do_setopts(Socket, [{active, once}], State),
     {noreply, set_inac_timer(State)};
 
 handle_info({stream_next, _Req_id}, State) ->
@@ -298,7 +298,7 @@ handle_sock_data(Data, #state{status = get_header}=State) ->
         #state{socket = Socket, status = Status, cur_req = CurReq} = State_1 ->
             case {Status, CurReq} of
                 {get_header, #request{caller_controls_socket = true}} ->
-                    do_setopts(Socket, [{active, once}], State_1);
+                    ok = do_setopts(Socket, [{active, once}], State_1);
                 _ ->
                     active_once(State_1)
             end,
@@ -337,7 +337,7 @@ handle_sock_data(Data, #state{status           = get_body,
                         true ->
                             active_once(State_1);
                         false when Ccs == true ->
-                            do_setopts(Socket, [{active, once}], State);
+                            ok = do_setopts(Socket, [{active, once}], State);
                         false ->
                             active_once(State_1)
                     end,
@@ -568,11 +568,6 @@ do_send(Req, #state{socket = Sock,
 do_send(Req, #state{socket = Sock, is_ssl = true})  ->  ssl:send(Sock, Req);
 do_send(Req, #state{socket = Sock, is_ssl = false}) ->  gen_tcp:send(Sock, Req).
 
-%% @spec do_send_body(Sock::socket_descriptor(), Source::source_descriptor(), IsSSL::boolean()) -> ok | error()
-%% source_descriptor() = fun_arity_0           |
-%%                       {fun_arity_0}         |
-%%                       {fun_arity_1, term()}
-%% error() = term()
 do_send_body(Source, State, TE) when is_function(Source) ->
     do_send_body({Source}, State, TE);
 do_send_body({Source}, State, TE) when is_function(Source) ->
@@ -589,30 +584,47 @@ do_send_body(Body, State, _TE) ->
             Ret
     end.
 
-generate_body({Source, Source_state} = In) ->
+generate_body({Source, Source_state} = In) when is_function(Source) ->
     case Source(Source_state) of
         {ok, Data, Source_state_1} ->
             {{ok, Data}, {Source, Source_state_1}};
         Ret ->
             {Ret, In}
     end;
-generate_body(Source) ->
+generate_body(Source) when is_function(Source) ->
     {Source(), Source}.
 
-do_send_body_1({Resp, Source}, State, TE, Acc) ->
+do_send_body_1({Resp, Source}, State, TE, Acc) when is_function(Source) ->
     case Resp of
         {ok, Data} when Data == []; Data == <<>> ->
-             do_send_body_1(generate_body(Source), State, TE, Acc);
+            do_send_body_1(generate_body(Source), State, TE, Acc);
         {ok, Data} ->
-            Data_1 = maybe_chunked_encode(Data, TE),
-            do_send(Data_1, State),
-            do_send_body_1(generate_body(Source), State, TE, [Data_1 | Acc]);
+            Acc_1 = case TE of
+                        true ->
+                            ok = do_send(maybe_chunked_encode(Data, TE), State),
+                            Acc;
+                        false ->
+                            [Data | Acc]
+                    end,
+            do_send_body_1(generate_body(Source), State, TE, Acc_1);
+        {ok, Data, New_source_state} when Data == []; Data == <<>> ->
+            do_send_body_1(generate_body({Source, New_source_state}), State, TE, Acc);
+        {ok, Data, New_source_state} ->
+            Acc_1 = case TE of
+                        true ->
+                            ok = do_send(maybe_chunked_encode(Data, TE), State),
+                            Acc;
+                        false ->
+                            [Data | Acc]
+                    end,
+            do_send_body_1(generate_body({Source, New_source_state}), State, TE, Acc_1);
         eof when TE == true ->
-            Body = <<"0\r\n\r\n">>,
-            do_send(Body, State),
-            {ok, list_to_binary(lists:reverse([Body | Acc]))};
+            ok = do_send(<<"0\r\n\r\n">>, State),
+            {ok, []};
         eof ->
-            {ok, list_to_binary(lists:reverse(Acc))};
+            Body = list_to_binary(lists:reverse(Acc)),
+            ok = do_send(Body, State),
+            {ok, Body};
         Err ->
             Err
     end.
@@ -634,7 +646,7 @@ do_close(#state{socket = Sock, is_ssl = false}) ->  catch gen_tcp:close(Sock).
 active_once(#state{cur_req = #request{caller_controls_socket = true}}) ->
     ok;
 active_once(#state{socket = Socket} = State) ->
-    do_setopts(Socket, [{active, once}], State).
+    ok = do_setopts(Socket, [{active, once}], State).
 
 do_setopts(_Sock, [],   _)    ->  ok;
 do_setopts(Sock, Opts, #state{is_ssl = true,
@@ -725,7 +737,7 @@ send_req_1(From,
             case do_send_body(Body_1, State_1, TE) of
                 {ok, _Sent_body} ->
                     trace_request_body(Body_1),
-                    active_once(State_1),
+                    ok = active_once(State_1),
                     State_1_1 = inc_pipeline_counter(State_1),
                     State_2 = State_1_1#state{status     = get_header,
                                               cur_req    = NewReq,
@@ -807,7 +819,7 @@ send_req_1(From,
                       timer_ref              = Ref
                      },
     trace_request(Req),
-    do_setopts(Socket, Caller_socket_options, State),
+    ok = do_setopts(Socket, Caller_socket_options, State),
     TE = is_chunked_encoding_specified(Options),
     case do_send(Req, State) of
         ok ->
@@ -1165,6 +1177,25 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                                ConnClose =:= "close" ->
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     State_1#state{reply_buffer = Data_1};
+                undefined when StatCode =:= "303" ->
+                    %% Some servers send 303 requests without a body.
+                    %% RFC2616 says that they SHOULD, but they dont.
+                    case ibrowse:get_config_value(allow_303_with_no_body, false) of
+                      false -> 
+                        fail_pipelined_requests(State_1,
+                                            {error, {content_length_undefined,
+                                                     {stat_code, StatCode}, Headers}}),
+                       {error, content_length_undefined};
+                      true -> 
+                        {_, Reqs_1} = queue:out(Reqs),
+                        send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
+                        State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
+                                             {ok, StatCode, Headers_1, []}),
+                        cancel_timer(T_ref, {eat_message, {req_timedout, From}}),
+                        State_2 = reset_state(State_1_1),
+                        State_3 = set_cur_request(State_2#state{reqs = Reqs_1}),
+                        parse_response(Data_1, State_3)
+                    end;
                 undefined ->
                     fail_pipelined_requests(State_1,
                                             {error, {content_length_undefined,
@@ -1457,7 +1488,7 @@ set_cur_request(#state{reqs = Reqs, socket = Socket} = State) ->
         {value, #request{caller_controls_socket = Ccs} = NextReq} ->
             case Ccs of
                 true ->
-                    do_setopts(Socket, [{active, once}], State);
+                    ok = do_setopts(Socket, [{active, once}], State);
                 _ ->
                     ok
             end,
@@ -1914,7 +1945,8 @@ dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
     try
         update_counter(Tid, self(), {2,-1,0,0}),
-        update_counter(Tid, self(), {3,-1,0,0})
+        update_counter(Tid, self(), {3,-1,0,0}),
+        ok
     catch
         _:_ ->
             ok
@@ -1990,5 +2022,7 @@ trace_request_body(Body) ->
             ok
     end.
 
-to_binary(X) when is_list(X)   -> list_to_binary(X);
-to_binary(X) when is_binary(X) -> X.
+to_binary({X, _}) when is_function(X) -> to_binary(X);
+to_binary(X) when is_function(X)      -> <<"body generated by function">>;
+to_binary(X) when is_list(X)          -> list_to_binary(X);
+to_binary(X) when is_binary(X)        -> X.
