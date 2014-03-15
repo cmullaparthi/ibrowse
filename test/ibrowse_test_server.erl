@@ -155,6 +155,25 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_head_transfer_enc"}}) ->
     Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nContent-Length:5\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
+
+process_request(Sock, Sock_type,
+                #request{method='GET',
+                         headers = Headers,
+                         uri = {abs_path, "/ibrowse_echo_header"}}) ->
+    Tag = "x-binary",
+    Headers_1 = [{to_lower(X), to_lower(Y)} || {http_header, _, X, _, Y} <- Headers],
+    X_binary_header_val = case lists:keysearch(Tag, 1, Headers_1) of
+                              false ->
+                                  "not_found";
+                              {value, {_, V}} ->
+                                  V
+                          end,
+    Resp = [<<"HTTP/1.1 200 OK\r\n">>,
+            <<"Server: ibrowse_test\r\n">>,
+            Tag, ": ", X_binary_header_val, "\r\n",
+            <<"Content-Length: 0\r\n\r\n">>],
+    do_send(Sock, Sock_type, Resp);
+
 process_request(Sock, Sock_type,
                 #request{method='HEAD',
                          headers = _Headers,
@@ -231,3 +250,7 @@ split_list_at(List2, 0, List1) ->
 split_list_at([H | List2], N, List1) ->
     split_list_at(List2, N-1, [H | List1]).
 
+to_lower(X) when is_atom(X) ->
+    list_to_atom(to_lower(atom_to_list(X)));
+to_lower(X) when is_list(X) ->
+    string:to_lower(X).

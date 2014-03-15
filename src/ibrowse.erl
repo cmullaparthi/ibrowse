@@ -150,7 +150,7 @@ stop() ->
 %% The Status return value indicates the HTTP status code returned by the webserver
 %% @spec send_req(Url::string(), Headers::headerList(), Method::method()) -> response()
 %% headerList() = [{header(), value()}]
-%% header() = atom() | string()
+%% header() = atom() | string() | binary()
 %% value() = term()
 %% method() = get | post | head | options | put | delete | trace | mkcol | propfind | proppatch | lock | unlock | move | copy
 %% Status = string()

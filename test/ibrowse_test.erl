@@ -32,6 +32,8 @@
          test_303_response_with_no_body/1,
          test_303_response_with_a_body/0,
          test_303_response_with_a_body/1,
+         test_binary_headers/0,
+         test_binary_headers/1,
          test_generate_body_0/0
 	]).
 
@@ -239,8 +241,8 @@ dump_errors(Key, Iod) ->
                     {local_test_fun, test_pipeline_head_timeout, []},
                     {local_test_fun, test_head_transfer_encoding, []},
                     {local_test_fun, test_head_response_with_body, []},
-                    {local_test_fun, test_303_response_with_a_body, []}
-
+                    {local_test_fun, test_303_response_with_a_body, []},
+                    {local_test_fun, test_binary_headers, []}
 		   ]).
 
 unit_tests() ->
@@ -462,6 +464,28 @@ test_head_transfer_encoding(Url) ->
     case ibrowse:send_req(Url, [], head) of
         {ok, "200", _, _} ->
             success;
+        Res ->
+            {test_failed, Res}
+    end.
+
+%%------------------------------------------------------------------------------
+%% Test what happens when the response to a HEAD request is a
+%% Chunked-Encoding response with a non-empty body. Issue #67 on
+%% Github
+%% ------------------------------------------------------------------------------
+test_binary_headers() ->
+    clear_msg_q(),
+    test_binary_headers("http://localhost:8181/ibrowse_echo_header").
+
+test_binary_headers(Url) ->
+    case ibrowse:send_req(Url, [{<<"x-binary">>, <<"x-header">>}], get) of
+        {ok, "200", Headers, _} ->
+            case proplists:get_value("x-binary", Headers) of
+                "x-header" ->
+                    success;
+                V ->
+                    {fail, V}
+            end;
         Res ->
             {test_failed, Res}
     end.
