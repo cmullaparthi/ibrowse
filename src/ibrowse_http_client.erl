@@ -587,7 +587,11 @@ do_send_body(Body, State, _TE) ->
 generate_body({Source, Source_state} = In) when is_function(Source) ->
     case Source(Source_state) of
         {ok, Data, Source_state_1} ->
-            {{ok, Data}, {Source, Source_state_1}};
+            {{ok, Data, Source_state_1}, Source};
+        {eof, Source_state_1} ->
+            {{eof, Source_state_1}, Source};
+        eof ->
+            {eof, Source};
         Ret ->
             {Ret, In}
     end;
@@ -618,6 +622,16 @@ do_send_body_1({Resp, Source}, State, TE, Acc) when is_function(Source) ->
                             [Data | Acc]
                     end,
             do_send_body_1(generate_body({Source, New_source_state}), State, TE, Acc_1);
+        {eof, _New_source_state} ->
+            case TE of
+                true ->
+                    ok = do_send(<<"0\r\n\r\n">>, State),
+                    {ok, []};
+                _ ->
+                    Body = list_to_binary(lists:reverse(Acc)),
+                    ok = do_send(Body, State),
+                    {ok, Body}
+            end;
         eof when TE == true ->
             ok = do_send(<<"0\r\n\r\n">>, State),
             {ok, []};
@@ -1181,12 +1195,12 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     %% Some servers send 303 requests without a body.
                     %% RFC2616 says that they SHOULD, but they dont.
                     case ibrowse:get_config_value(allow_303_with_no_body, false) of
-                      false -> 
+                      false ->
                         fail_pipelined_requests(State_1,
                                             {error, {content_length_undefined,
                                                      {stat_code, StatCode}, Headers}}),
                        {error, content_length_undefined};
-                      true -> 
+                      true ->
                         {_, Reqs_1} = queue:out(Reqs),
                         send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                         State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format,
