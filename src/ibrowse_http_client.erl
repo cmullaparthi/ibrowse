@@ -1163,9 +1163,9 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                     {_, Reqs_1} = queue:out(Reqs),
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
                     Reply = case Give_raw_req of
-                                true ->
-                                    {ok, StatCode, Headers_1, []};
                                 false ->
+                                    {ok, StatCode, Headers_1, []};
+                                true ->
                                     {ok, StatCode, Headers_1, [], Raw_req}
                             end,
                     State_1_1 = do_reply(State_1, From, StreamTo, ReqId, Resp_format, Reply),
