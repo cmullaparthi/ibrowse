@@ -1,7 +1,5 @@
 -module(ibrowse_socks5).
 
--include_lib("kernel/src/inet_dns.hrl").
-
 -export([connect/3]).
 
 -define(TIMEOUT, 2000).
