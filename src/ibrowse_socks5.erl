@@ -7,11 +7,13 @@
 -define(SOCKS5, 5).
 -define(AUTH_METHOD_NO, 0).
 -define(AUTH_METHOD_USERPASS, 2).
--define(ADDRESS_TYPE_IP4, 1).
+-define(ADDRESS_TYPE_DOMAINNAME, 3).
 -define(COMMAND_TYPE_TCPIP_STREAM, 1).
 -define(RESERVER, 0).
 -define(STATUS_GRANTED, 0).
 
+connect(Host, Port, Options) when is_list(Host) ->
+    connect(list_to_binary(Host), Port, Options);
 connect(Host, Port, Options) ->
     Socks5Host = proplists:get_value(socks5_host, Options),
     Socks5Port = proplists:get_value(socks5_port, Options),
@@ -40,8 +42,6 @@ connect(Host, Port, Options) ->
             {ok, <<1, 0>>} = gen_tcp:recv(Socket, 2, ?TIMEOUT)
     end,
 
-    {ok, {IP1,IP2,IP3,IP4}} = inet:getaddr(Host, inet),
-
-    ok = gen_tcp:send(Socket, <<?SOCKS5, ?COMMAND_TYPE_TCPIP_STREAM, ?RESERVER, ?ADDRESS_TYPE_IP4, IP1, IP2, IP3, IP4, Port:16>>),
-    {ok, << ?SOCKS5, ?STATUS_GRANTED, ?RESERVER, ?ADDRESS_TYPE_IP4, IP1, IP2, IP3, IP4, Port:16 >>} = gen_tcp:recv(Socket, 10, ?TIMEOUT),
+    ok = gen_tcp:send(Socket, <<?SOCKS5, ?COMMAND_TYPE_TCPIP_STREAM, ?RESERVER, ?ADDRESS_TYPE_DOMAINNAME, (byte_size(Host)), Host/binary, Port:16>>),
+    {ok, << ?SOCKS5, ?STATUS_GRANTED, ?RESERVER, ?ADDRESS_TYPE_DOMAINNAME, _/binary >>} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     {ok, Socket}.
