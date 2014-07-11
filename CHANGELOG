@@ -1,5 +1,11 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+10-07-2014 - v4.1.1
+             * Added support for accepting binaries as header names
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/110
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/111
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/112
+
 18-04-2013 - v4.1.0
              * Fix for https://github.com/cmullaparthi/ibrowse/issues/101
              * Support for https://github.com/cmullaparthi/ibrowse/issues/90
