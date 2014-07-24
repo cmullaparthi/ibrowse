@@ -12,7 +12,7 @@
           host_type  % 'hostname', 'ipv4_address' or 'ipv6_address'
 }).
 
--record(lb_pid, {host_port, pid}).
+-record(lb_pid, {host_port, pid, ets_tid}).
 
 -record(client_conn, {key, cur_pipeline_size = 0, reqs_served = 0}).
 

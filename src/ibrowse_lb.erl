@@ -17,7 +17,8 @@
 -export([
 	 start_link/1,
 	 spawn_connection/6,
-         stop/1
+         stop/1,
+         proc_name/2
 	]).
 
 %% gen_server callbacks
@@ -49,8 +50,12 @@
 %% Function: start_link/0
 %% Description: Starts the server
 %%--------------------------------------------------------------------
-start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+start_link([Host, Port] = Args) ->
+    Name = proc_name(Host, Port),
+    gen_server:start_link({local, Name}, ?MODULE, Args, []).
+
+proc_name(Host, Port) ->
+    list_to_atom("ibrowse_lb_" ++ Host ++ "_" ++ integer_to_list(Port)).
 
 %%====================================================================
 %% Server functions
@@ -70,13 +75,13 @@ init([Host, Port]) ->
     Max_pipe_sz = ibrowse:get_config_value({max_pipeline_size, Host, Port}, 10),
     put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
     put(ibrowse_trace_token, ["LB: ", Host, $:, integer_to_list(Port)]),
-    Tid = ets:new(ibrowse_lb, [public, ordered_set]),
-    {ok, #state{parent_pid = whereis(ibrowse),
+    State = #state{parent_pid = whereis(ibrowse),
 		host = Host,
 		port = Port,
-		ets_tid = Tid,
 		max_pipeline_size = Max_pipe_sz,
-	        max_sessions = Max_sessions}}.
+	        max_sessions = Max_sessions},
+    State_1 = maybe_create_ets(State),
+    {ok, State_1}.
 
 spawn_connection(Lb_pid, Url,
 		 Max_sessions,
@@ -137,7 +142,7 @@ handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_opt
     State_1 = maybe_create_ets(State),
     Tid = State_1#state.ets_tid,
     {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}, Process_options),
-    ets:insert(Tid, {Pid, 0, 0}),
+    ets:insert(Tid, {{0, Pid}, []}),
     {reply, {ok, Pid}, State_1#state{num_cur_sessions = Cur + 1,
                                      max_sessions = Max_sess,
                                      max_pipeline_size = Max_pipe}};
@@ -231,30 +236,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 find_best_connection(Tid, Max_pipe) ->
-    ets:safe_fixtable(Tid, true),
-    Res = find_best_connection(ets:first(Tid), Tid, Max_pipe),
-    ets:safe_fixtable(Tid, false),
-    Res.
-
-find_best_connection('$end_of_table', _, _) ->
-    {error, retry_later};
-find_best_connection(Pid, Tid, Max_pipe) ->
-    case ets:lookup(Tid, Pid) of
-        [{Pid, Cur_sz, Speculative_sz}] when Cur_sz < Max_pipe,
-                                             Speculative_sz < Max_pipe ->
-            case catch ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}) of
-                {'EXIT', _} ->
-                    %% The selected process has shutdown
-                    find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe);
-                _ ->
-                    {ok, Pid}
-            end;
-         _ ->
-            find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe)
+    First = ets:first(Tid),
+    case First of
+        {Pid_pipeline_size, Pid} when Pid_pipeline_size < Max_pipe ->
+            ets:delete(Tid, First),
+            ets:insert(Tid, {{Pid_pipeline_size, Pid}, []}),
+            {ok, Pid};
+        _ ->
+           {error, retry_later}
     end.
 
-maybe_create_ets(#state{ets_tid = undefined} = State) ->
+maybe_create_ets(#state{ets_tid = undefined,
+                        host = Host, port = Port} = State) ->
     Tid = ets:new(ibrowse_lb, [public, ordered_set]),
+    ets:insert(ibrowse_lb, #lb_pid{host_port = {Host, Port},
+                                   pid = self(),
+                                   ets_tid = Tid}),
     State#state{ets_tid = Tid};
 maybe_create_ets(State) ->
     State.

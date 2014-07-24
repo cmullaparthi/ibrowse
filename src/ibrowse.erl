@@ -638,8 +638,8 @@ show_dest_status(Url) ->
 show_dest_status(Host, Port) ->
     case get_metrics(Host, Port) of
         {Lb_pid, MsgQueueSize, Tid, Size,
-         {{First_p_sz, First_speculative_sz},
-          {Last_p_sz, Last_speculative_sz}}} ->
+         {{First_p_sz, _},
+          {Last_p_sz, _}}} ->
             io:format("Load Balancer Pid     : ~p~n"
                       "LB process msg q size : ~p~n"
                       "LB ETS table id       : ~p~n"
@@ -647,66 +647,39 @@ show_dest_status(Host, Port) ->
                       "Smallest pipeline     : ~p:~p~n"
                       "Largest pipeline      : ~p:~p~n",
                       [Lb_pid, MsgQueueSize, Tid, Size, 
-                       First_p_sz, First_speculative_sz,
-                       Last_p_sz, Last_speculative_sz]);
+                       First_p_sz, First_p_sz, 
+                       Last_p_sz, Last_p_sz
+                      ]);
         _Err ->
             io:format("Metrics not available~n", [])
     end.
 
 get_metrics() ->
-    Dests = lists:filter(fun({lb_pid, {Host, Port}, _}) when is_list(Host),
-                                                             is_integer(Port) ->
-                                 true;
-                            (_) ->
-                                 false
-                         end, ets:tab2list(ibrowse_lb)),
-    All_ets = ets:all(),
-    lists:map(fun({lb_pid, {Host, Port}, Lb_pid}) ->
-                  case lists:dropwhile(
-                         fun(Tid) ->
-                                 ets:info(Tid, owner) /= Lb_pid
-                         end, All_ets) of
-                      [] ->
-                          {Host, Port, Lb_pid, unknown, 0};
-                      [Tid | _] ->
-                          Size = case catch (ets:info(Tid, size)) of
-                                     N when is_integer(N) -> N;
-                                     _ -> 0
-                                 end,
-                          {Host, Port, Lb_pid, Tid, Size}
-                  end
-              end, Dests).
+    [get_metrics(Host, Port) || #lb_pid{host_port = {Host, Port}} <-
+                                    ets:tab2list(ibrowse_lb),
+                                is_list(Host),
+                                is_integer(Port)].
 
 get_metrics(Host, Port) ->
     case ets:lookup(ibrowse_lb, {Host, Port}) of
         [] ->
             no_active_processes;
-        [#lb_pid{pid = Lb_pid}] ->
+        [#lb_pid{pid = Lb_pid, ets_tid = Tid}] ->
             MsgQueueSize = (catch process_info(Lb_pid, message_queue_len)),
-            %% {Lb_pid, MsgQueueSize,
-            case lists:dropwhile(
-                   fun(Tid) ->
-                           ets:info(Tid, owner) /= Lb_pid
-                   end, ets:all()) of
-                [] ->
-                    {Lb_pid, MsgQueueSize, unknown, 0, unknown};
-                [Tid | _] ->
-                    try
-                        Size = ets:info(Tid, size),
-                        case Size of
-                            0 ->
-                                ok;
-                            _ ->
-                                First = ets:first(Tid),
-                                Last = ets:last(Tid),
-                                [{_, First_p_sz, First_speculative_sz}] = ets:lookup(Tid, First),
-                                [{_, Last_p_sz, Last_speculative_sz}] = ets:lookup(Tid, Last),
-                                {Lb_pid, MsgQueueSize, Tid, Size,
-                                 {{First_p_sz, First_speculative_sz}, {Last_p_sz, Last_speculative_sz}}}
-                        end
-                    catch _:_ ->
-                            not_available
-                    end
+            try
+                Size = ets:info(Tid, size),
+                case Size of
+                    0 ->
+                        ok;
+                    _ ->
+                        {First_p_sz, _} = ets:first(Tid),
+                        {Last_p_sz, _} = ets:last(Tid),
+                        {Lb_pid, MsgQueueSize, Tid, Size,
+                         {{First_p_sz, First_p_sz},
+                          {Last_p_sz, Last_p_sz}}}
+                end
+            catch _:_ ->
+                    not_available
             end
     end.
 
@@ -944,7 +917,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 do_get_connection(#url{host = Host, port = Port}, []) ->
     {ok, Pid} = ibrowse_lb:start_link([Host, Port]),
-    ets:insert(ibrowse_lb, #lb_pid{host_port = {Host, Port}, pid = Pid}),
     Pid;
 do_get_connection(_Url, [#lb_pid{pid = Pid}]) ->
     Pid.

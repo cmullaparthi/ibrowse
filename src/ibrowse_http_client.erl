@@ -1941,13 +1941,8 @@ inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;
 inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
-inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
-                           lb_ets_tid = Tid} = State) ->
-    update_counter(Tid, self(), {2,1,99999,9999}),
+inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz} = State) ->
     State#state{cur_pipeline_size = Pipe_sz + 1}.
-
-update_counter(Tid, Key, Args) ->
-    ets:update_counter(Tid, Key, Args).
 
 dec_pipeline_counter(#state{is_closing = true} = State) ->
     State;
@@ -1956,8 +1951,8 @@ dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
 dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             lb_ets_tid = Tid} = State) ->
     _ = try
-	    update_counter(Tid, self(), {2,-1,0,0}),
-	    update_counter(Tid, self(), {3,-1,0,0})
+            ets:insert(Tid, {{Pipe_sz - 1, self()}, []}),
+            ets:delete(Tid, {Pipe_sz, self()})
 	catch
 	    _:_ ->
 		ok
