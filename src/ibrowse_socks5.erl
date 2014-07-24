@@ -1,47 +1,108 @@
+% Licensed under the Apache License, Version 2.0 (the "License"); you may not
+% use this file except in compliance with the License. You may obtain a copy of
+% the License at
+%
+%   http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+% WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+% License for the specific language governing permissions and limitations under
+% the License.
+
 -module(ibrowse_socks5).
 
--export([connect/3]).
+-define(VERSION, 5).
+-define(CONNECT, 1).
 
--define(TIMEOUT, 2000).
+-define(NO_AUTH, 0).
+-define(USERPASS, 2).
+-define(UNACCEPTABLE, 16#FF).
+-define(RESERVED, 0).
 
--define(SOCKS5, 5).
--define(AUTH_METHOD_NO, 0).
--define(AUTH_METHOD_USERPASS, 2).
--define(ADDRESS_TYPE_IP4, 1).
--define(COMMAND_TYPE_TCPIP_STREAM, 1).
--define(RESERVER, 0).
--define(STATUS_GRANTED, 0).
+-define(ATYP_IPV4, 1).
+-define(ATYP_DOMAINNAME, 3).
+-define(ATYP_IPV6, 4).
 
-connect(Host, Port, Options) ->
-    Socks5Host = proplists:get_value(socks5_host, Options),
-    Socks5Port = proplists:get_value(socks5_port, Options),
+-define(SUCCEEDED, 0).
 
-    {ok, Socket} = gen_tcp:connect(Socks5Host, Socks5Port, [binary, {packet, 0}, {keepalive, true}, {active, false}]),
+-export([connect/5]).
 
-    {ok, _Bin} =
-    case proplists:get_value(socks5_user, Options, undefined) of
-        undefined ->
-            ok = gen_tcp:send(Socket, <<?SOCKS5, 1, ?AUTH_METHOD_NO>>),
-            {ok, <<?SOCKS5, ?AUTH_METHOD_NO>>} = gen_tcp:recv(Socket, 2, ?TIMEOUT);
-        _Else ->
-            Socks5User = list_to_binary(proplists:get_value(socks5_user, Options)),
-            Socks5Pass = list_to_binary(proplists:get_value(socks5_pass, Options)),
+-import(ibrowse_lib, [get_value/2, get_value/3]).
 
-            ok = gen_tcp:send(Socket, <<?SOCKS5, 1, ?AUTH_METHOD_USERPASS>>),
-            {ok, <<?SOCKS5, ?AUTH_METHOD_USERPASS>>} = gen_tcp:recv(Socket, 2, ?TIMEOUT),
+connect(Host, Port, Options, SockOptions, Timeout) ->
+    Socks5Host = get_value(socks5_host, Options),
+    Socks5Port = get_value(socks5_port, Options),
+    case gen_tcp:connect(Socks5Host, Socks5Port, SockOptions, Timeout) of
+        {ok, Socket} ->
+            case handshake(Socket, Options) of
+                ok ->
+                    case connect(Host, Port, Socket) of
+                        ok ->
+                            {ok, Socket};
+                        Else ->
+                            gen_tcp:close(Socket),
+                            Else
+                    end;
+                Else ->
+                    gen_tcp:close(Socket),
+                    Else
+            end;
+        Else ->
+            Else
+    end.
 
-            UserLength = byte_size(Socks5User),
-
-            ok = gen_tcp:send(Socket, << 1, UserLength >>),
-            ok = gen_tcp:send(Socket, Socks5User),
-            PassLength = byte_size(Socks5Pass),
-            ok = gen_tcp:send(Socket, << PassLength >>),
-            ok = gen_tcp:send(Socket, Socks5Pass),
-            {ok, <<1, 0>>} = gen_tcp:recv(Socket, 2, ?TIMEOUT)
+handshake(Socket, Options) when is_port(Socket) ->
+    {Handshake, Success} = case get_value(socks5_user, Options, <<>>) of
+        <<>> ->
+            {<<?VERSION, 1, ?NO_AUTH>>, ?NO_AUTH};
+        User ->
+            Password = get_value(socks5_password, Options, <<>>),
+            {<<?VERSION, 1, ?USERPASS, (byte_size(User)), User,
+               (byte_size(Password)), Password>>, ?USERPASS}
     end,
+    ok = gen_tcp:send(Socket, Handshake),
+    case gen_tcp:recv(Socket, 0) of
+        {ok, <<?VERSION, Success>>} ->
+            ok;
+        {ok, <<?VERSION, ?UNACCEPTABLE>>} ->
+            {error, unacceptable};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
-    {ok, {IP1,IP2,IP3,IP4}} = inet:getaddr(Host, inet),
+connect(Host, Port, Via) when is_list(Host) ->
+    connect(list_to_binary(Host), Port, Via);
+connect(Host, Port, Via) when is_binary(Host), is_integer(Port),
+                              is_port(Via) ->
+    {AddressType, Address} = case inet:parse_address(binary_to_list(Host)) of
+        {ok, {IP1, IP2, IP3, IP4}} ->
+            {?ATYP_IPV4, <<IP1,IP2,IP3,IP4>>};
+        {ok, {IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}} ->
+            {?ATYP_IPV6, <<IP1,IP2,IP3,IP4,IP5,IP6,IP7,IP8>>};
+        _ ->
+            HostLength = byte_size(Host),
+            {?ATYP_DOMAINNAME, <<HostLength,Host/binary>>}
+    end,
+    ok = gen_tcp:send(Via,
+        <<?VERSION, ?CONNECT, ?RESERVED,
+          AddressType, Address/binary,
+          (Port):16>>),
+    case gen_tcp:recv(Via, 0) of
+        {ok, <<?VERSION, ?SUCCEEDED, ?RESERVED, _/binary>>} ->
+            ok;
+        {ok, <<?VERSION, Rep, ?RESERVED, _/binary>>} ->
+            {error, rep(Rep)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
-    ok = gen_tcp:send(Socket, <<?SOCKS5, ?COMMAND_TYPE_TCPIP_STREAM, ?RESERVER, ?ADDRESS_TYPE_IP4, IP1, IP2, IP3, IP4, Port:16>>),
-    {ok, << ?SOCKS5, ?STATUS_GRANTED, ?RESERVER, ?ADDRESS_TYPE_IP4, IP1, IP2, IP3, IP4, Port:16 >>} = gen_tcp:recv(Socket, 10, ?TIMEOUT),
-    {ok, Socket}.
+rep(0) -> succeeded;
+rep(1) -> server_fail;
+rep(2) -> disallowed_by_ruleset;
+rep(3) -> network_unreachable;
+rep(4) -> host_unreachable;
+rep(5) -> connection_refused;
+rep(6) -> ttl_expired;
+rep(7) -> command_not_supported;
+rep(8) -> address_type_not_supported.

@@ -504,18 +504,23 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
             State
     end.
 
-do_connect(Host, Port, Options, #state{is_ssl      = true,
-                                       use_proxy   = false,
-                                       ssl_options = SSLOptions},
-           Timeout) ->
-    ssl:connect(Host, Port, get_sock_options(Host, Options, SSLOptions), Timeout);
-do_connect(Host, Port, Options, _State, Timeout) ->
-    Socks5Host = get_value(socks5_host, Options, undefined),
-    case Socks5Host of
-      undefined ->
-        gen_tcp:connect(Host, Port, get_sock_options(Host, Options, []), Timeout);
-      _ ->
-        catch ibrowse_socks5:connect(Host, Port, Options)
+do_connect(Host, Port, Options, State, Timeout) ->
+    SockOptions = get_sock_options(Host, Options, State#state.ssl_options),
+    case {get_value(socks5_host, Options, undefined), State#state.is_ssl} of
+        {undefined, true} ->
+            ssl:connect(Host, Port, SockOptions, Timeout);
+        {undefined, false} ->
+            gen_tcp:connect(Host, Port, SockOptions, Timeout);
+        {_, _} ->
+            case {ibrowse_socks5:connect(Host, Port, Options, SockOptions, Timeout),
+                  State#state.is_ssl} of
+                {{ok, Socket}, true} ->
+                    ssl:connect(Socket, SockOptions, Timeout);
+                {{ok, Socket}, false} ->
+                    {ok, Socket};
+                {Else, _} ->
+                    Else
+            end
     end.
 
 get_sock_options(Host, Options, SSLOptions) ->
