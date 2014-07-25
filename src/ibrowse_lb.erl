@@ -17,8 +17,7 @@
 -export([
 	 start_link/1,
 	 spawn_connection/6,
-         stop/1,
-         proc_name/2
+         stop/1
 	]).
 
 %% gen_server callbacks
@@ -50,12 +49,8 @@
 %% Function: start_link/0
 %% Description: Starts the server
 %%--------------------------------------------------------------------
-start_link([Host, Port] = Args) ->
-    Name = proc_name(Host, Port),
-    gen_server:start_link({local, Name}, ?MODULE, Args, []).
-
-proc_name(Host, Port) ->
-    list_to_atom("ibrowse_lb_" ++ Host ++ "_" ++ integer_to_list(Port)).
+start_link(Args) ->
+    gen_server:start_link(?MODULE, Args, []).
 
 %%====================================================================
 %% Server functions
