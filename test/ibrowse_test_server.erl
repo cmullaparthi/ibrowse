@@ -15,25 +15,29 @@
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
-                  Name = server_proc_name(Port),
-                  register(Name, self()),
-                  case do_listen(Sock_type, Port, [{active, false},
-                                                   {reuseaddr, true},
-                                                   {nodelay, true},
-                                                   {packet, http}]) of
-                      {ok, Sock} ->
-                          do_trace("Server listening on port: ~p~n", [Port]),
-                          accept_loop(Sock, Sock_type);
-                      Err ->
-                          erlang:error(
+        Proc_name = server_proc_name(Port),
+        case whereis(Proc_name) of
+            undefined ->
+                register(Proc_name, self()),
+                case do_listen(Sock_type, Port, [{active, false},
+                    {reuseaddr, true},
+                    {nodelay, true},
+                    {packet, http}]) of
+                    {ok, Sock} ->
+                        do_trace("Server listening on port: ~p~n", [Port]),
+                        accept_loop(Sock, Sock_type);
+                    Err ->
+                        erlang:error(
                             lists:flatten(
-                              io_lib:format(
-                                "Failed to start server on port ~p. ~p~n",
-                                [Port, Err]))),
-                          exit({listen_error, Err})
-                  end,
-                  unregister(Name)
-          end,
+                                io_lib:format(
+                                    "Failed to start server on port ~p. ~p~n",
+                                    [Port, Err]))),
+                        exit({listen_error, Err})
+                end;
+            _X ->
+                ok
+        end
+    end,
     spawn_link(Fun).
 
 stop_server(Port) ->
@@ -88,12 +92,16 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
         {http, Sock, {http_header, _, _, _, _} = H} ->
             server_loop(Sock, Sock_type, Req#request{headers = [H | Headers]});
         {http, Sock, http_eoh} ->
-            process_request(Sock, Sock_type, Req),
-            server_loop(Sock, Sock_type, #request{});
+            case process_request(Sock, Sock_type, Req) of
+                close_connection ->
+                    gen_tcp:shutdown(Sock, read_write);
+                _ ->
+                    server_loop(Sock, Sock_type, #request{})
+            end;
         {http, Sock, {http_error, Err}} ->
-            do_trace("Error parsing HTTP request:~n"
-                     "Req so far : ~p~n"
-                     "Err        : ", [Req, Err]),
+            io:format("Error parsing HTTP request:~n"
+                      "Req so far : ~p~n"
+                      "Err        : ~p", [Req, Err]),
             exit({http_error, Err});
         {setopts, Opts} ->
             setopts(Sock, Sock_type, Opts),
@@ -104,9 +112,9 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
         stop ->
             ok;
         Other ->
-            do_trace("Recvd unknown msg: ~p~n", [Other]),
+            io:format("Recvd unknown msg: ~p~n", [Other]),
             exit({unknown_msg, Other})
-    after 5000 ->
+    after 120000 ->
             do_trace("Timing out client connection~n", []),
             ok
     end.
@@ -145,7 +153,7 @@ process_request(Sock, Sock_type,
                          headers = _Headers,
                          uri = {abs_path, "/ibrowse_inac_timeout_test"}} = Req) ->
     do_trace("Recvd req: ~p. Sleeping for 30 secs...~n", [Req]),
-    timer:sleep(30000),
+    timer:sleep(3000),
     do_trace("...Sending response now.~n", []),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp);
@@ -178,7 +186,7 @@ process_request(Sock, Sock_type,
                 #request{method='HEAD',
                          headers = _Headers,
                          uri = {abs_path, "/ibrowse_head_test"}}) ->
-    Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nTransfer-Encoding: chunked\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
+    Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\Date: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type,
                 #request{method='POST',
@@ -192,10 +200,26 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_303_with_body_test"}}) ->
     Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\nContent-Length: 5\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
+process_request(Sock, Sock_type,
+    #request{method='GET',
+        headers = _Headers,
+        uri = {abs_path, "/ibrowse_handle_one_request_only_with_delay"}}) ->
+    timer:sleep(2000),
+    Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
+    do_send(Sock, Sock_type, Resp),
+    close_connection;
+process_request(Sock, Sock_type,
+    #request{method='GET',
+        headers = _Headers,
+        uri = {abs_path, "/ibrowse_handle_one_request_only"}}) ->
+    Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
+    do_send(Sock, Sock_type, Resp),
+    close_connection;
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
-    do_send(Sock, Sock_type, Resp).
+    do_send(Sock, Sock_type, Resp),
+    timer:sleep(random:uniform(100)).
 
 do_send(Sock, tcp, Resp) ->
     gen_tcp:send(Sock, Resp);
