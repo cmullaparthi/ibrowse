@@ -8,9 +8,10 @@
 	 load_test/3,
 	 send_reqs_1/3,
 	 do_send_req/2,
+         local_unit_tests/0,
 	 unit_tests/0,
-	 unit_tests/1,
-	 unit_tests_1/2,
+         unit_tests/2,
+         unit_tests_1/3,
 	 ue_test/0,
 	 ue_test/1,
 	 verify_chunked_streaming/0,
@@ -34,8 +35,12 @@
          test_303_response_with_a_body/1,
          test_binary_headers/0,
          test_binary_headers/1,
-         test_generate_body_0/0
+         test_generate_body_0/0,
+         test_retry_of_requests/0,
+         test_retry_of_requests/1
 	]).
+
+-include("ibrowse.hrl").
 
 test_stream_once(Url, Method, Options) ->
     test_stream_once(Url, Method, Options, 5000).
@@ -90,6 +95,8 @@ send_reqs_1(Url, NumWorkers, NumReqsPerWorker) ->
     ets:new(pid_table, [named_table, public]),
     ets:new(ibrowse_test_results, [named_table, public]),
     ets:new(ibrowse_errors, [named_table, public, ordered_set]),
+    ets:new(ibrowse_counter, [named_table, public, ordered_set]),
+    ets:insert(ibrowse_counter, {req_id, 1}),
     init_results(),
     process_flag(trap_exit, true),
     log_msg("Starting spawning of workers...~n", []),
@@ -207,6 +214,16 @@ dump_errors(Key, Iod) ->
 %%------------------------------------------------------------------------------
 %% Unit Tests
 %%------------------------------------------------------------------------------
+-define(LOCAL_TESTS, [
+                      {local_test_fun, test_20122010, []},
+                      {local_test_fun, test_pipeline_head_timeout, []},
+                      {local_test_fun, test_head_transfer_encoding, []},
+                      {local_test_fun, test_head_response_with_body, []},
+                      {local_test_fun, test_303_response_with_a_body, []},
+                      {local_test_fun, test_binary_headers, []},
+                      {local_test_fun, test_retry_of_requests, []}
+                     ]).
+
 -define(TEST_LIST, [{"http://intranet/messenger", get},
 		    {"http://www.google.co.uk", get},
 		    {"http://www.google.com", get},
@@ -236,27 +253,26 @@ dump_errors(Key, Iod) ->
 		    {"http://jigsaw.w3.org/HTTP/Basic/", get, [{basic_auth, {"guest", "guest"}}]},
 		    {"http://jigsaw.w3.org/HTTP/CL/", get},
 		    {"http://www.httpwatch.com/httpgallery/chunked/", get},
-                    {"https://github.com", get, [{ssl_options, [{depth, 2}]}]},
-                    {local_test_fun, test_20122010, []},
-                    {local_test_fun, test_pipeline_head_timeout, []},
-                    {local_test_fun, test_head_transfer_encoding, []},
-                    {local_test_fun, test_head_response_with_body, []},
-                    {local_test_fun, test_303_response_with_a_body, []},
-                    {local_test_fun, test_binary_headers, []}
-		   ]).
+                    {"https://github.com", get, [{ssl_options, [{depth, 2}]}]}
+		   ] ++ ?LOCAL_TESTS).
+
+local_unit_tests() ->
+    error_logger:tty(false),
+    unit_tests([], ?LOCAL_TESTS),
+    error_logger:tty(true).
 
 unit_tests() ->
-    unit_tests([]).
+    unit_tests([], ?TEST_LIST).
 
-unit_tests(Options) ->
+unit_tests(Options, Test_list) ->
     application:start(crypto),
     application:start(public_key),
     application:start(ssl),
     (catch ibrowse_test_server:start_server(8181, tcp)),
-    ibrowse:start(),
+    application:start(ibrowse),
     Options_1 = Options ++ [{connect_timeout, 5000}],
     Test_timeout = proplists:get_value(test_timeout, Options, 60000),
-    {Pid, Ref} = erlang:spawn_monitor(?MODULE, unit_tests_1, [self(), Options_1]),
+    {Pid, Ref} = erlang:spawn_monitor(?MODULE, unit_tests_1, [self(), Options_1, Test_list]),
     receive 
 	{done, Pid} ->
 	    ok;
@@ -269,14 +285,14 @@ unit_tests(Options) ->
     catch ibrowse_test_server:stop_server(8181),
     ok.
 
-unit_tests_1(Parent, Options) ->
+unit_tests_1(Parent, Options, Test_list) ->
     lists:foreach(fun({local_test_fun, Fun_name, Args}) ->
                           execute_req(local_test_fun, Fun_name, Args);
                      ({Url, Method}) ->
 			  execute_req(Url, Method, Options);
 		     ({Url, Method, X_Opts}) ->
 			  execute_req(Url, Method, X_Opts ++ Options)
-		  end, ?TEST_LIST),
+		  end, Test_list),
     Parent ! {done, self()}.
 
 verify_chunked_streaming() ->
@@ -425,6 +441,7 @@ maybe_stream_next(Req_id, Options) ->
     end.
 
 execute_req(local_test_fun, Method, Args) ->
+    reset_ibrowse(),
     io:format("     ~-54.54w: ", [Method]),
     Result = (catch apply(?MODULE, Method, Args)),
     io:format("~p~n", [Result]);
@@ -539,6 +556,74 @@ test_303_response_with_a_body(Url) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% Test that retry of requests happens correctly, and that ibrowse doesn't retry
+%% if there is not enough time left
+%%------------------------------------------------------------------------------
+test_retry_of_requests() ->
+    clear_msg_q(),
+    test_retry_of_requests("http://localhost:8181/ibrowse_handle_one_request_only_with_delay").
+
+test_retry_of_requests(Url) ->
+    Timeout_1 = 2050,
+    Res_1 = test_retry_of_requests(Url, Timeout_1),
+    case lists:filter(fun({_Pid, {ok, "200", _, _}}) ->
+                              true;
+                         (_) -> false
+                      end, Res_1) of
+        [_|_] = X ->
+            Res_1_1 = Res_1 -- X,
+            case lists:all(
+                   fun({_Pid, {error, retry_later}}) ->
+                           true;
+                      (_) ->
+                           false
+                   end, Res_1_1) of
+                true ->
+                    ok;
+                false ->
+                    exit({failed, Timeout_1, Res_1})
+            end;
+        _ ->
+            exit({failed, Timeout_1, Res_1})
+    end,
+    reset_ibrowse(),
+    Timeout_2 = 2200,
+    Res_2 = test_retry_of_requests(Url, Timeout_2),
+    case lists:filter(fun({_Pid, {ok, "200", _, _}}) ->
+                              true;
+                         (_) -> false
+                      end, Res_2) of
+        [_|_] = Res_2_X ->
+            Res_2_1 = Res_2 -- Res_2_X,
+            case lists:all(
+                   fun({_Pid, {error, X_err_2}}) ->
+                           (X_err_2 == retry_later) orelse (X_err_2 == req_timedout);
+                      (_) ->
+                           false
+                   end, Res_2_1) of
+                true ->
+                    ok;
+                false ->
+                    exit({failed, Timeout_2, Res_2})
+            end;
+        _ ->
+            exit({failed, Timeout_2, Res_2})
+    end,
+    success.
+
+test_retry_of_requests(Url, Timeout) ->
+    #url{host = Host, port = Port} = ibrowse_lib:parse_url(Url),
+    ibrowse:set_max_sessions(Host, Port, 1),
+    Parent = self(),
+    Pids = lists:map(fun(_) ->
+                        spawn(fun() ->
+                                 Res = (catch ibrowse:send_req(Url, [], get, [], [], Timeout)),
+                                 Parent ! {self(), Res}
+                              end)
+                     end, lists:seq(1,10)),
+    accumulate_worker_resp(Pids).
+
+%%------------------------------------------------------------------------------
 %% Test what happens when the request at the head of a pipeline times out
 %%------------------------------------------------------------------------------
 test_pipeline_head_timeout() ->
@@ -547,22 +632,27 @@ test_pipeline_head_timeout() ->
 
 test_pipeline_head_timeout(Url) ->
     {ok, Pid} = ibrowse:spawn_worker_process(Url),
+    Fixed_timeout = 2000,
     Test_parent = self(),
     Fun = fun({fixed, Timeout}) ->
-                  spawn(fun() ->
-                                do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
-                        end);
-             (Timeout_mult) ->
-                  spawn(fun() ->
-                                Timeout = 1000 + Timeout_mult*1000,
-                                do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
-                        end)
-          end,
-    Pids = [Fun(X) || X <- [{fixed, 32000} | lists:seq(1,10)]],
+        X_pid = spawn(fun() ->
+            do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
+        end),
+        %% io:format("Pid ~p with a fixed timeout~n", [X_pid]),
+        X_pid;
+        (Timeout_mult) ->
+            Timeout = Fixed_timeout + Timeout_mult*1000,
+            X_pid = spawn(fun() ->
+                do_test_pipeline_head_timeout(Url, Pid, Test_parent, Timeout)
+            end),
+            %% io:format("Pid ~p with a timeout of ~p~n", [X_pid, Timeout]),
+            X_pid
+    end,
+    Pids = [Fun(X) || X <- [{fixed, Fixed_timeout} | lists:seq(1,10)]],
     Result = accumulate_worker_resp(Pids),
     case lists:all(fun({_, X_res}) ->
-                           X_res == {error,req_timedout}
-                   end, Result) of
+        (X_res == {error,req_timedout}) orelse (X_res == {error, connection_closed})
+    end, Result) of
         true ->
             success;
         false ->
@@ -725,3 +815,7 @@ do_trace(true, Fmt, Args) ->
     io:format("~s -- " ++ Fmt, [ibrowse_lib:printable_date() | Args]);
 do_trace(_, _, _) ->
     ok.
+
+reset_ibrowse() ->
+    application:stop(ibrowse),
+    application:start(ibrowse).
