@@ -717,7 +717,7 @@ get_metrics(Host, Port) ->
                         Size = ets:info(Tid, size),
                         case Size of
                             0 ->
-                                {Lb_pid, MsgQueueSize, undefined, 0, {{0, 0}, {0, 0}}};
+                                {Lb_pid, MsgQueueSize, Tid, 0, {{0, 0}, {0, 0}}};
                             _ ->
                                 {First_p_sz, _, _} = ets:first(Tid),
                                 {Last_p_sz, _, _} = ets:last(Tid),
