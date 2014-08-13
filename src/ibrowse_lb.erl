@@ -112,10 +112,7 @@ handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     {stop, normal, State};
 
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({Pid, _, _}, Acc) ->
-                      ibrowse_http_client:stop(Pid),
-                      Acc
-              end, [], Tid),
+    stop_all_conn_procs(Tid),
     gen_server:reply(_From, ok),
     {stop, normal, State};
 
@@ -196,9 +193,16 @@ handle_info(_Info, State) ->
 %% Description: Shutdown the server
 %% Returns: any (ignored by gen_server)
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{host = Host, port = Port} = _State) ->
+terminate(_Reason, #state{host = Host, port = Port, ets_tid = Tid} = _State) ->
     catch ets:delete(ibrowse_lb, {Host, Port}),
+    stop_all_conn_procs(Tid),
     ok.
+
+stop_all_conn_procs(Tid) ->
+    ets:foldl(fun({{_, _, Pid}, _}, Acc) ->
+                      ibrowse_http_client:stop(Pid),
+                      Acc
+              end, [], Tid).
 
 %%--------------------------------------------------------------------
 %% Func: code_change/3
