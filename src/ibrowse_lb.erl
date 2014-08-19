@@ -216,7 +216,10 @@ handle_info(_Info, State) ->
 %% Description: Shutdown the server
 %% Returns: any (ignored by gen_server)
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{host = Host, port = Port}) ->
+    % Use delete_object instead of delete in case another process for this host/port
+    % has been spawned, in which case will be deleting the wrong record because pid won't match.
+    ets:delete_object(ibrowse_lb, #lb_pid{host_port = {Host, Port}, pid = self()}),
     ok.
 
 %%--------------------------------------------------------------------
