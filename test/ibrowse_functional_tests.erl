@@ -31,9 +31,13 @@ running_server_fixture_test_() ->
      fun setup/0,
      fun teardown/1,
      [
-        ?TIMEDTEST("Simple request can be honored", simple_request)
+        ?TIMEDTEST("Simple request can be honored", simple_request),
+        ?TIMEDTEST("Slow server causes timeout", slow_server_timeout)
      ]
     }.
 
 simple_request() ->
     ?assertMatch({ok, "200", _, _}, ibrowse:send_req(?BASE_URL, [], get, [], [])).
+
+slow_server_timeout() ->
+    ?assertMatch({error, req_timedout}, ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [], 5000)).

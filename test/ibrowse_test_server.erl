@@ -201,6 +201,8 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_303_with_body_test"}}) ->
     Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\nContent-Length: 5\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
+process_request(_Sock, _Sock_type, #request{uri = {abs_path, "/never_respond"} } ) ->
+    noop;
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
