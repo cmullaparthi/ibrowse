@@ -1,5 +1,7 @@
 %%% File    : ibrowse_test_server.erl
 %%% Author  : Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
+%%%           Benjamin Lee <yardspoon@gmail.com>
+%%%           Brian Richards <bmrichards16@gmail.com>
 %%% Description : A server to simulate various test scenarios
 %%% Created : 17 Oct 2010 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 
@@ -12,6 +14,7 @@
 -record(request, {method, uri, version, headers = [], body = []}).
 
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
+-define(ACCEPT_TIMEOUT_MS, 1000).
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
@@ -38,6 +41,7 @@ start_server(Port, Sock_type) ->
 
 stop_server(Port) ->
     server_proc_name(Port) ! stop,
+    timer:sleep(2000),  % wait for server to receive msg and unregister
     ok.
 
 server_proc_name(Port) ->
@@ -51,9 +55,9 @@ do_listen(ssl, Port, Opts) ->
     ssl:listen(Port, Opts).
 
 do_accept(tcp, Listen_sock) ->
-    gen_tcp:accept(Listen_sock);
+    gen_tcp:accept(Listen_sock, ?ACCEPT_TIMEOUT_MS);
 do_accept(ssl, Listen_sock) ->
-    ssl:ssl_accept(Listen_sock).
+    ssl:ssl_accept(Listen_sock, ?ACCEPT_TIMEOUT_MS).
 
 accept_loop(Sock, Sock_type) ->
     case do_accept(Sock_type, Sock) of
@@ -65,6 +69,13 @@ accept_loop(Sock, Sock_type) ->
             set_controlling_process(Conn, Sock_type, Pid),
             Pid ! {setopts, [{active, true}]},
             accept_loop(Sock, Sock_type);
+        {error, timeout} ->
+            receive
+                stop ->
+                    ok
+            after 10 ->
+                accept_loop(Sock, Sock_type)
+            end;
         Err ->
             Err
     end.
@@ -100,8 +111,6 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
             server_loop(Sock, Sock_type, Req);
         {tcp_closed, Sock} ->
             do_trace("Client closed connection~n", []),
-            ok;
-        stop ->
             ok;
         Other ->
             do_trace("Recvd unknown msg: ~p~n", [Other]),
