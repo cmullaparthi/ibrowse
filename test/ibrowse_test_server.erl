@@ -8,18 +8,21 @@
 -module(ibrowse_test_server).
 -export([
          start_server/2,
-         stop_server/1
+         stop_server/1,
+         get_conn_pipeline_depth/0
         ]).
 
 -record(request, {method, uri, version, headers = [], body = []}).
 
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
 -define(ACCEPT_TIMEOUT_MS, 1000).
+-define(CONN_PIPELINE_DEPTH, conn_pipeline_depth).
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
                   Name = server_proc_name(Port),
                   register(Name, self()),
+                  ets:new(?CONN_PIPELINE_DEPTH, [named_table, public, set]),
                   case do_listen(Sock_type, Port, [{active, false},
                                                    {reuseaddr, true},
                                                    {nodelay, true},
@@ -44,6 +47,9 @@ stop_server(Port) ->
     timer:sleep(2000),  % wait for server to receive msg and unregister
     ok.
 
+get_conn_pipeline_depth() ->
+    ets:tab2list(?CONN_PIPELINE_DEPTH).
+
 server_proc_name(Port) ->
     list_to_atom("ibrowse_test_server_"++integer_to_list(Port)).
 
@@ -66,6 +72,7 @@ accept_loop(Sock, Sock_type) ->
               fun() ->
                       server_loop(Conn, Sock_type, #request{})
               end),
+            ets:insert(?CONN_PIPELINE_DEPTH, {Pid, 0}),
             set_controlling_process(Conn, Sock_type, Pid),
             Pid ! {setopts, [{active, true}]},
             accept_loop(Sock, Sock_type);
@@ -99,6 +106,7 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
         {http, Sock, {http_header, _, _, _, _} = H} ->
             server_loop(Sock, Sock_type, Req#request{headers = [H | Headers]});
         {http, Sock, http_eoh} ->
+            ets:update_counter(?CONN_PIPELINE_DEPTH, self(), 1),
             process_request(Sock, Sock_type, Req),
             server_loop(Sock, Sock_type, #request{});
         {http, Sock, {http_error, Err}} ->

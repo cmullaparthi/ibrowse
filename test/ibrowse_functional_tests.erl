@@ -32,7 +32,8 @@ running_server_fixture_test_() ->
      fun teardown/1,
      [
         ?TIMEDTEST("Simple request can be honored", simple_request),
-        ?TIMEDTEST("Slow server causes timeout", slow_server_timeout)
+        ?TIMEDTEST("Slow server causes timeout", slow_server_timeout),
+        ?TIMEDTEST("Requests are balanced over connections", balanced_connections)
      ]
     }.
 
@@ -41,3 +42,32 @@ simple_request() ->
 
 slow_server_timeout() ->
     ?assertMatch({error, req_timedout}, ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [], 5000)).
+
+balanced_connections() ->
+    MaxSessions = 4,
+    MaxPipeline = 100,
+    RequestsSent = 80,
+    BalancedNumberOfRequestsPerConnection = 20,
+
+    ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()),
+
+    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], 30000) end,
+    times(RequestsSent, fun() -> spawn_link(Fun) end),
+
+    timer:sleep(1000),
+
+    Diffs = [Count - BalancedNumberOfRequestsPerConnection || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
+    ?assertEqual(MaxSessions, length(Diffs)),
+
+    lists:foreach(fun(X) -> ?assertEqual(yep, close_to_zero(X)) end, Diffs).
+
+close_to_zero(0) -> yep;
+close_to_zero(-1) -> yep;
+close_to_zero(1) -> yep;
+close_to_zero(X) -> {nope, X}.
+
+times(0, _) ->
+    ok;
+times(X, Fun) ->
+    Fun(),
+    times(X - 1, Fun).
