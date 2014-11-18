@@ -558,7 +558,7 @@ send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
 %% <code>stream_to</code> option
 %% @spec stream_next(Req_id :: req_id()) -> ok | {error, unknown_req_id}
 stream_next(Req_id) ->    
-    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+    case ets:lookup(?STREAM_TABLE, {req_id_pid, Req_id}) of
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
@@ -573,7 +573,7 @@ stream_next(Req_id) ->
 %% error returned.
 %% @spec stream_close(Req_id :: req_id()) -> ok | {error, unknown_req_id}
 stream_close(Req_id) ->    
-    case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
+    case ets:lookup(?STREAM_TABLE, {req_id_pid, Req_id}) of
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
@@ -747,8 +747,8 @@ init(_) ->
     put(my_trace_flag, State#state.trace),
     put(ibrowse_trace_token, "ibrowse"),
     ?LOAD_BALANCER_NAMED_TABLE = ets:new(?LOAD_BALANCER_NAMED_TABLE, [named_table, public, {keypos, 2}]),
-    ibrowse_conf               = ets:new(ibrowse_conf, [named_table, protected, {keypos, 2}]),
-    ibrowse_stream             = ets:new(ibrowse_stream, [named_table, public]),
+    ?CONF_TABLE                = ets:new(?CONF_TABLE, [named_table, protected, {keypos, 2}]),
+    ?STREAM_TABLE              = ets:new(?STREAM_TABLE, [named_table, public]),
     import_config(),
     {ok, #state{}}.
 
@@ -770,7 +770,7 @@ import_config(Filename) ->
     end.
 
 apply_config(Terms) ->
-    ets:delete_all_objects(ibrowse_conf),
+    ets:delete_all_objects(?CONF_TABLE),
     insert_config(Terms).
 
 insert_config(Terms) ->
@@ -783,12 +783,12 @@ insert_config(Terms) ->
                        {{options, Host, Port}, Options}],
                   lists:foreach(
                     fun({X, Y}) ->
-                            ets:insert(ibrowse_conf,
+                            ets:insert(?CONF_TABLE,
                                        #ibrowse_conf{key = X, 
                                                      value = Y})
                     end, I);
              ({K, V}) ->
-                  ets:insert(ibrowse_conf,
+                  ets:insert(?CONF_TABLE,
                              #ibrowse_conf{key = K,
                                            value = V});
              (X) ->
@@ -799,7 +799,7 @@ insert_config(Terms) ->
 %% @doc Internal export
 get_config_value(Key) ->
     try
-        [#ibrowse_conf{value = V}] = ets:lookup(ibrowse_conf, Key),
+        [#ibrowse_conf{value = V}] = ets:lookup(?CONF_TABLE, Key),
         V
     catch
         error:badarg ->
@@ -809,7 +809,7 @@ get_config_value(Key) ->
 %% @doc Internal export
 get_config_value(Key, DefVal) ->
     try
-        case ets:lookup(ibrowse_conf, Key) of
+        case ets:lookup(?CONF_TABLE, Key) of
             [] ->
                 DefVal;
             [#ibrowse_conf{value = V}] ->
@@ -821,7 +821,7 @@ get_config_value(Key, DefVal) ->
     end.
 
 set_config_value(Key, Val) ->
-    ets:insert(ibrowse_conf, #ibrowse_conf{key = Key, value = Val}).
+    ets:insert(?CONF_TABLE, #ibrowse_conf{key = Key, value = Val}).
 %%--------------------------------------------------------------------
 %% Function: handle_call/3
 %% Description: Handling call messages
@@ -888,7 +888,7 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info(all_trace_off, State) ->
     Mspec = [{{ibrowse_conf,{trace,'$1','$2'},true},[],[{{'$1','$2'}}]}],
-    Trace_on_dests = ets:select(ibrowse_conf, Mspec),
+    Trace_on_dests = ets:select(?CONF_TABLE, Mspec),
     Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _) ->
                   case lists:member({H, P}, Trace_on_dests) of
                       false ->
@@ -900,7 +900,7 @@ handle_info(all_trace_off, State) ->
                   Acc
           end,
     ets:foldl(Fun, undefined, ?LOAD_BALANCER_NAMED_TABLE),
-    ets:select_delete(ibrowse_conf, [{{ibrowse_conf,{trace,'$1','$2'},true},[],['true']}]),
+    ets:select_delete(?CONF_TABLE, [{{ibrowse_conf,{trace,'$1','$2'},true},[],['true']}]),
     {noreply, State};
                                   
 handle_info({trace, Bool}, State) ->
@@ -916,7 +916,7 @@ handle_info({trace, Bool, Host, Port}, State) ->
                   Acc
           end,
     ets:foldl(Fun, undefined, ?LOAD_BALANCER_NAMED_TABLE),
-    ets:insert(ibrowse_conf, #ibrowse_conf{key = {trace, Host, Port},
+    ets:insert(?CONF_TABLE, #ibrowse_conf{key = {trace, Host, Port},
                                            value = Bool}),
     {noreply, State};
                      

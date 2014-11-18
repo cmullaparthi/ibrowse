@@ -20,5 +20,7 @@
 
 -define(CONNECTIONS_LOCAL_TABLE, ibrowse_lb).
 -define(LOAD_BALANCER_NAMED_TABLE, ibrowse_lb).
+-define(CONF_TABLE, ibrowse_conf).
+-define(STREAM_TABLE, ibrowse_stream).
 
 -endif.

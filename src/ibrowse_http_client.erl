@@ -801,7 +801,7 @@ send_req_1(From,
             {Caller, once} when is_pid(Caller) or
                                 is_atom(Caller) ->
                 Async_pid_rec = {{req_id_pid, ReqId}, self()},
-                true = ets:insert(ibrowse_stream, Async_pid_rec),
+                true = ets:insert(?STREAM_TABLE, Async_pid_rec),
                 {Caller, true};
             undefined ->
                 {undefined, false};
@@ -1835,7 +1835,7 @@ do_reply(#state{prev_req_id = Prev_req_id} = State,
     %% stream_once and sync requests on the same connection, it will
     %% take a while for the req_id-pid mapping to get cleared, but it
     %% should do no harm.
-    ets:delete(ibrowse_stream, {req_id_pid, Prev_req_id}),
+    ets:delete(?STREAM_TABLE, {req_id_pid, Prev_req_id}),
     State_1#state{prev_req_id = ReqId};
 do_reply(State, _From, StreamTo, ReqId, Resp_format, Msg) ->
     State_1 = dec_pipeline_counter(State),
@@ -1853,7 +1853,7 @@ do_error_reply(#state{reqs = Reqs, tunnel_setup_queue = Tun_q} = State, Err) ->
     ReqList = queue:to_list(Reqs),
     lists:foreach(fun(#request{from=From, stream_to=StreamTo, req_id=ReqId,
                                response_format = Resp_format}) ->
-                          ets:delete(ibrowse_stream, {req_id_pid, ReqId}),
+                          ets:delete(?STREAM_TABLE, {req_id_pid, ReqId}),
                           do_reply(State, From, StreamTo, ReqId, Resp_format, {error, Err})
                   end, ReqList),
     lists:foreach(
