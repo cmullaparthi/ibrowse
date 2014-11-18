@@ -18,4 +18,7 @@
 
 -record(ibrowse_conf, {key, value}).
 
+-define(CONNECTIONS_LOCAL_TABLE, ibrowse_lb).
+-define(LOAD_BALANCER_NAMED_TABLE, ibrowse_lb).
+
 -endif.

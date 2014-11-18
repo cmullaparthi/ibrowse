@@ -317,7 +317,7 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
         #url{host = Host,
              port = Port,
              protocol = Protocol} = Parsed_url ->
-            Lb_pid = case ets:lookup(ibrowse_lb, {Host, Port}) of
+            Lb_pid = case ets:lookup(?LOAD_BALANCER_NAMED_TABLE, {Host, Port}) of
                          [] ->
                              get_lb_pid(Parsed_url);
                          [#lb_pid{pid = Lb_pid_1}] ->
@@ -659,7 +659,7 @@ get_metrics() ->
                                  true;
                             (_) ->
                                  false
-                         end, ets:tab2list(ibrowse_lb)),
+                         end, ets:tab2list(?LOAD_BALANCER_NAMED_TABLE)),
     All_ets = ets:all(),
     lists:map(fun({lb_pid, {Host, Port}, Lb_pid}) ->
                   case lists:dropwhile(
@@ -678,7 +678,7 @@ get_metrics() ->
               end, Dests).
 
 get_metrics(Host, Port) ->
-    case ets:lookup(ibrowse_lb, {Host, Port}) of
+    case ets:lookup(?LOAD_BALANCER_NAMED_TABLE, {Host, Port}) of
         [] ->
             no_active_processes;
         [#lb_pid{pid = Lb_pid}] ->
@@ -746,9 +746,9 @@ init(_) ->
     State = #state{},
     put(my_trace_flag, State#state.trace),
     put(ibrowse_trace_token, "ibrowse"),
-    ibrowse_lb     = ets:new(ibrowse_lb, [named_table, public, {keypos, 2}]),
-    ibrowse_conf   = ets:new(ibrowse_conf, [named_table, protected, {keypos, 2}]),
-    ibrowse_stream = ets:new(ibrowse_stream, [named_table, public]),
+    ?LOAD_BALANCER_NAMED_TABLE = ets:new(?LOAD_BALANCER_NAMED_TABLE, [named_table, public, {keypos, 2}]),
+    ibrowse_conf               = ets:new(ibrowse_conf, [named_table, protected, {keypos, 2}]),
+    ibrowse_stream             = ets:new(ibrowse_stream, [named_table, public]),
     import_config(),
     {ok, #state{}}.
 
@@ -833,7 +833,7 @@ set_config_value(Key, Val) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
 handle_call({get_lb_pid, #url{host = Host, port = Port} = Url}, _From, State) ->
-    Pid = do_get_connection(Url, ets:lookup(ibrowse_lb, {Host, Port})),
+    Pid = do_get_connection(Url, ets:lookup(?LOAD_BALANCER_NAMED_TABLE, {Host, Port})),
     {reply, Pid, State};
 
 handle_call(stop, _From, State) ->
@@ -841,7 +841,7 @@ handle_call(stop, _From, State) ->
     ets:foldl(fun(#lb_pid{pid = Pid}, Acc) ->
                       ibrowse_lb:stop(Pid),
                       Acc
-              end, [], ibrowse_lb),
+              end, [], ?LOAD_BALANCER_NAMED_TABLE),
     {stop, normal, ok, State};
 
 handle_call({set_config_value, Key, Val}, _From, State) ->
@@ -899,7 +899,7 @@ handle_info(all_trace_off, State) ->
              (_, Acc) ->
                   Acc
           end,
-    ets:foldl(Fun, undefined, ibrowse_lb),
+    ets:foldl(Fun, undefined, ?LOAD_BALANCER_NAMED_TABLE),
     ets:select_delete(ibrowse_conf, [{{ibrowse_conf,{trace,'$1','$2'},true},[],['true']}]),
     {noreply, State};
                                   
@@ -915,7 +915,7 @@ handle_info({trace, Bool, Host, Port}, State) ->
              (_, Acc) ->
                   Acc
           end,
-    ets:foldl(Fun, undefined, ibrowse_lb),
+    ets:foldl(Fun, undefined, ?LOAD_BALANCER_NAMED_TABLE),
     ets:insert(ibrowse_conf, #ibrowse_conf{key = {trace, Host, Port},
                                            value = Bool}),
     {noreply, State};
@@ -944,7 +944,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 do_get_connection(#url{host = Host, port = Port}, []) ->
     {ok, Pid} = ibrowse_lb:start_link([Host, Port]),
-    ets:insert(ibrowse_lb, #lb_pid{host_port = {Host, Port}, pid = Pid}),
+    ets:insert(?LOAD_BALANCER_NAMED_TABLE, #lb_pid{host_port = {Host, Port}, pid = Pid}),
     Pid;
 do_get_connection(_Url, [#lb_pid{pid = Pid}]) ->
     Pid.

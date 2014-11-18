@@ -70,7 +70,7 @@ init([Host, Port]) ->
     Max_pipe_sz = ibrowse:get_config_value({max_pipeline_size, Host, Port}, 10),
     put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
     put(ibrowse_trace_token, ["LB: ", Host, $:, integer_to_list(Port)]),
-    Tid = ets:new(ibrowse_lb, [public, ordered_set]),
+    Tid = ets:new(?CONNECTIONS_LOCAL_TABLE, [public, ordered_set]),
     {ok, #state{parent_pid = whereis(ibrowse),
 		host = Host,
 		port = Port,
@@ -199,9 +199,9 @@ handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
 handle_info(timeout, State) ->
     %% We can't shutdown the process immediately because a request
     %% might be in flight. So we first remove the entry from the
-    %% ibrowse_lb ets table, and then shutdown a couple of seconds
-    %% later
-    ets:delete(ibrowse_lb, {State#state.host, State#state.port}),
+    %% load balancer named ets table, and then shutdown a couple
+    %% of seconds later
+    ets:delete(?LOAD_BALANCER_NAMED_TABLE, {State#state.host, State#state.port}),
     erlang:send_after(2000, self(), shutdown),
     {noreply, State#state{proc_state = shutting_down}};
 
@@ -219,7 +219,7 @@ handle_info(_Info, State) ->
 terminate(_Reason, #state{host = Host, port = Port}) ->
     % Use delete_object instead of delete in case another process for this host/port
     % has been spawned, in which case will be deleting the wrong record because pid won't match.
-    ets:delete_object(ibrowse_lb, #lb_pid{host_port = {Host, Port}, pid = self()}),
+    ets:delete_object(?LOAD_BALANCER_NAMED_TABLE, #lb_pid{host_port = {Host, Port}, pid = self()}),
     ok.
 
 %%--------------------------------------------------------------------
@@ -257,7 +257,7 @@ find_best_connection(Pid, Tid, Max_pipe) ->
     end.
 
 maybe_create_ets(#state{ets_tid = undefined} = State) ->
-    Tid = ets:new(ibrowse_lb, [public, ordered_set]),
+    Tid = ets:new(?CONNECTIONS_LOCAL_TABLE, [public, ordered_set]),
     State#state{ets_tid = Tid};
 maybe_create_ets(State) ->
     State.
