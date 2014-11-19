@@ -224,10 +224,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 find_best_connection(Tid, Max_pipe) ->
-    ets:safe_fixtable(Tid, true),
-    Res = find_best_connection(ets:first(Tid), Tid, Max_pipe),
-    ets:safe_fixtable(Tid, false),
-    Res.
+    find_best_connection(ets:first(Tid), Tid, Max_pipe).
 
 find_best_connection('$end_of_table', _, _) ->
     {error, retry_later};
