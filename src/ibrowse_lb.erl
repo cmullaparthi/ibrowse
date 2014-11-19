@@ -14,7 +14,10 @@
 -export([
 	 start_link/1,
 	 spawn_connection/6,
-     stop/1
+     stop/1,
+     report_connection_down/1,
+     report_request_underway/1,
+     report_request_complete/1
 	]).
 
 %% gen_server callbacks
@@ -67,6 +70,16 @@ stop(Lb_pid) ->
         ok ->
             ok
     end.
+
+report_connection_down(Tid) ->
+    catch ets:delete(Tid, self()).
+
+report_request_underway(Tid) ->
+    catch ets:update_counter(Tid, self(), {2, 1, 9999, 9999}).
+
+report_request_complete(Tid) ->
+    catch ets:update_counter(Tid, self(), {2, -1, 0, 0}),
+    catch ets:update_counter(Tid, self(), {3, -1, 0, 0}).
 
 %%====================================================================
 %% Server functions

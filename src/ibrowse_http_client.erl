@@ -1939,31 +1939,22 @@ to_lower([], Acc) ->
 shutting_down(#state{lb_ets_tid = undefined}) ->
     ok;
 shutting_down(#state{lb_ets_tid = Tid}) ->
-    catch ets:delete(Tid, self()).
+    ibrowse_lb:report_connection_down(Tid).
 
 inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;
 inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
 inc_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
-    update_counter(Tid, self(), {2,1,99999,9999}),
+    ibrowse_lb:report_request_underway(Tid),
     State.
-
-update_counter(Tid, Key, Args) ->
-    ets:update_counter(Tid, Key, Args).
 
 dec_pipeline_counter(#state{is_closing = true} = State) ->
     State;
 dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
 dec_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
-    _ = try
-	    update_counter(Tid, self(), {2,-1,0,0}),
-	    update_counter(Tid, self(), {3,-1,0,0})
-	catch
-	    _:_ ->
-		ok
-	end,
+    ibrowse_lb:report_request_complete(Tid),
     State.
 
 flatten([H | _] = L) when is_integer(H) ->
