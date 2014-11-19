@@ -167,18 +167,6 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({'EXIT', Parent, _Reason}, #state{parent_pid = Parent} = State) ->
     {stop, normal, State};
-handle_info({'EXIT', _Pid, _Reason}, #state{ets_tid = undefined} = State) ->
-    {noreply, State};
-handle_info({'EXIT', Pid, _Reason}, #state{ets_tid = Tid} = State) ->
-    ets:match_delete(Tid, {{'_', Pid}, '_'}),
-    case ets:info(Tid, size) of
-		  0 ->
-		      ets:delete(Tid),
-			  {noreply, State#state{ets_tid = undefined}, 10000};
-		  _ ->
-		      {noreply, State}
-	      end;
-
 handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
     {noreply, State};
