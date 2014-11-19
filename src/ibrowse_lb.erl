@@ -38,6 +38,8 @@
                 max_pipeline_size,
                 proc_state}).
 
+-define(PIPELINE_MAX, 99999).
+
 -include("ibrowse.hrl").
 
 %%====================================================================
@@ -75,11 +77,10 @@ report_connection_down(Tid) ->
     catch ets:delete(Tid, self()).
 
 report_request_underway(Tid) ->
-    catch ets:update_counter(Tid, self(), {2, 1, 9999, 9999}).
+    catch ets:update_counter(Tid, self(), {2, 1, ?PIPELINE_MAX, ?PIPELINE_MAX}).
 
 report_request_complete(Tid) ->
-    catch ets:update_counter(Tid, self(), {2, -1, 0, 0}),
-    catch ets:update_counter(Tid, self(), {3, -1, 0, 0}).
+    catch ets:update_counter(Tid, self(), {2, -1, 0, 0}).
 
 %%====================================================================
 %% Server functions
@@ -121,7 +122,7 @@ handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     gen_server:reply(_From, ok),
     {stop, normal, State};
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({Pid, _, _}, Acc) ->
+    ets:foldl(fun({Pid, _}, Acc) ->
                   ibrowse_http_client:stop(Pid),
                   Acc
               end, [], Tid),
@@ -171,10 +172,8 @@ handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
     {noreply, State};
 handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({{_, Pid}, _}, Acc) when is_pid(Pid) ->
+    ets:foldl(fun({Pid, _}, Acc) when is_pid(Pid) ->
 		            catch Pid ! {trace, Bool},
-		            Acc;
-		         (_, Acc) ->
 		            Acc
 	             end, undefined, Tid),
     put(my_trace_flag, Bool),
@@ -224,8 +223,7 @@ find_best_connection('$end_of_table', _, _) ->
     {error, retry_later};
 find_best_connection(Pid, Tid, Max_pipe) ->
     case ets:lookup(Tid, Pid) of
-        [{Pid, Cur_sz, Speculative_sz}] when Cur_sz < Max_pipe,
-                                             Speculative_sz < Max_pipe ->
+        [{Pid, Cur_sz}] when Cur_sz < Max_pipe ->
             case record_request_for_connection(Tid, Pid) of
                 {'EXIT', _} ->
                     %% The selected process has shutdown
@@ -248,7 +246,7 @@ num_current_connections(Tid) ->
     catch ets:info(Tid, size).
 
 record_new_connection(Tid, Pid) ->
-    catch ets:insert(Tid, {Pid, 0, 0}).
+    catch ets:insert(Tid, {Pid, 0}).
 
 record_request_for_connection(Tid, Pid) ->
-    catch ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}).
+    catch ets:update_counter(Tid, Pid, {2, 1, ?PIPELINE_MAX, ?PIPELINE_MAX}).
