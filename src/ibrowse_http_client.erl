@@ -762,11 +762,10 @@ send_req_1(From,
                 {ok, _Sent_body} ->
                     trace_request_body(Body_1),
                     _ = active_once(State_1),
-                    State_1_1 = inc_pipeline_counter(State_1),
-                    State_2 = State_1_1#state{status     = get_header,
-                                              cur_req    = NewReq,
-                                              proxy_tunnel_setup = in_progress,
-                                              tunnel_setup_queue = [{From, Url, Headers, Method, Body, Options, Timeout}]},
+                    State_2 = State_1#state{status     = get_header,
+                                            cur_req    = NewReq,
+                                            proxy_tunnel_setup = in_progress,
+                                            tunnel_setup_queue = [{From, Url, Headers, Method, Body, Options, Timeout}]},
                     State_3 = set_inac_timer(State_2),
                     {noreply, State_3};
                 Err ->
@@ -853,15 +852,14 @@ send_req_1(From,
                     Raw_req = list_to_binary([Req, Sent_body]),
                     NewReq_1 = NewReq#request{raw_req = Raw_req},
                     State_1 = State#state{reqs=queue:in(NewReq_1, State#state.reqs)},
-                    State_2 = inc_pipeline_counter(State_1),
-                    _ = active_once(State_2),
-                    State_3 = case Status of
+                    _ = active_once(State_1),
+                    State_2 = case Status of
                                   idle ->
-                                      State_2#state{
+                                      State_1#state{
                                         status     = get_header,
                                         cur_req    = NewReq_1};
                                   _ ->
-                                      State_2
+                                      State_1
                               end,
                     case StreamTo of
                         undefined ->
@@ -875,8 +873,8 @@ send_req_1(From,
                                     catch StreamTo ! {ibrowse_async_raw_req, Raw_req}
                             end
                     end,
-                    State_4 = set_inac_timer(State_3),
-                    {noreply, State_4};
+                    State_3 = set_inac_timer(State_2),
+                    {noreply, State_3};
                 Err ->
                     shutting_down(State),
                     do_trace("Send failed... Reason: ~p~n", [Err]),
@@ -1815,13 +1813,13 @@ format_response_data(Resp_format, Body) ->
 do_reply(State, From, undefined, _, Resp_format, {ok, St_code, Headers, Body}) ->
     Msg_1 = {ok, St_code, Headers, format_response_data(Resp_format, Body)},
     gen_server:reply(From, Msg_1),
-    dec_pipeline_counter(State);
+    report_request_complete(State);
 do_reply(State, From, undefined, _, _, Msg) ->
     gen_server:reply(From, Msg),
-    dec_pipeline_counter(State);
+    report_request_complete(State);
 do_reply(#state{prev_req_id = Prev_req_id} = State,
          _From, StreamTo, ReqId, Resp_format, {ok, _, _, Body}) ->
-    State_1 = dec_pipeline_counter(State),
+    State_1 = report_request_complete(State),
     case Body of
         [] ->
             ok;
@@ -1843,7 +1841,7 @@ do_reply(#state{prev_req_id = Prev_req_id} = State,
     ets:delete(?STREAM_TABLE, {req_id_pid, Prev_req_id}),
     State_1#state{prev_req_id = ReqId};
 do_reply(State, _From, StreamTo, ReqId, Resp_format, Msg) ->
-    State_1 = dec_pipeline_counter(State),
+    State_1 = report_request_complete(State),
     Msg_1 = format_response_data(Resp_format, Msg),
     catch StreamTo ! {ibrowse_async_response, ReqId, Msg_1},
     State_1.
@@ -1946,19 +1944,11 @@ shutting_down(#state{lb_ets_tid = undefined}) ->
 shutting_down(#state{lb_ets_tid = Tid}) ->
     ibrowse_lb:report_connection_down(Tid).
 
-inc_pipeline_counter(#state{is_closing = true} = State) ->
+report_request_complete(#state{is_closing = true} = State) ->
     State;
-inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
+report_request_complete(#state{lb_ets_tid = undefined} = State) ->
     State;
-inc_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
-    ibrowse_lb:report_request_underway(Tid),
-    State.
-
-dec_pipeline_counter(#state{is_closing = true} = State) ->
-    State;
-dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
-    State;
-dec_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
+report_request_complete(#state{lb_ets_tid = Tid} = State) ->
     ibrowse_lb:report_request_complete(Tid),
     State.
 

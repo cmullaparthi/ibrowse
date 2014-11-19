@@ -56,15 +56,10 @@ balanced_connections() ->
 
     timer:sleep(1000),
 
-    Diffs = [Count - BalancedNumberOfRequestsPerConnection || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
-    ?assertEqual(MaxSessions, length(Diffs)),
+    Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
+    ?assertEqual(MaxSessions, length(Counts)),
 
-    lists:foreach(fun(X) -> ?assertEqual(yep, close_to_zero(X)) end, Diffs).
-
-close_to_zero(0) -> yep;
-close_to_zero(-1) -> yep;
-close_to_zero(1) -> yep;
-close_to_zero(X) -> {nope, X}.
+    ?assertEqual(lists:duplicate(MaxSessions, BalancedNumberOfRequestsPerConnection), Counts).
 
 times(0, _) ->
     ok;

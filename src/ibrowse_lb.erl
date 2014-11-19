@@ -16,7 +16,6 @@
 	 spawn_connection/6,
      stop/1,
      report_connection_down/1,
-     report_request_underway/1,
      report_request_complete/1
 	]).
 
@@ -39,6 +38,9 @@
                 proc_state}).
 
 -define(PIPELINE_MAX, 99999).
+-define(KEY_MATCHSPEC_BY_PID(Pid), [{{{'_', '_', Pid}, '_'}, [], ['$_']}]).
+-define(KEY_MATCHSPEC(Key), [{{Key, '_'}, [], ['$_']}]).
+-define(KEY_MATCHSPEC_FOR_DELETE(Key), [{{Key, '_'}, [], [true]}]).
 
 -include("ibrowse.hrl").
 
@@ -74,13 +76,23 @@ stop(Lb_pid) ->
     end.
 
 report_connection_down(Tid) ->
-    catch ets:delete(Tid, self()).
-
-report_request_underway(Tid) ->
-    catch ets:update_counter(Tid, self(), {2, 1, ?PIPELINE_MAX, ?PIPELINE_MAX}).
+    %% Don't cascade errors since Tid is really managed by other process
+    catch ets:select_delete(Tid, ?KEY_MATCHSPEC_BY_PID(self())).
 
 report_request_complete(Tid) ->
-    catch ets:update_counter(Tid, self(), {2, -1, 0, 0}).
+    %% Don't cascade errors since Tid is really managed by other process
+    catch case ets:select(Tid, ?KEY_MATCHSPEC_BY_PID(self())) of
+        [MatchKey] ->
+            case ets:select_delete(Tid, ?KEY_MATCHSPEC_FOR_DELETE(MatchKey)) of
+                1 ->
+                    ets:insert(Tid, {decremented(MatchKey), undefined}),
+                    true;
+                _ ->
+                    false
+            end;
+        _ ->
+            false
+    end.
 
 %%====================================================================
 %% Server functions
@@ -210,23 +222,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-find_best_connection(Tid, Max_pipe) ->
-    find_best_connection(ets:first(Tid), Tid, Max_pipe).
-
-find_best_connection('$end_of_table', _, _) ->
-    {error, retry_later};
-find_best_connection(Pid, Tid, Max_pipe) ->
-    case ets:lookup(Tid, Pid) of
-        [{Pid, Cur_sz}] when Cur_sz < Max_pipe ->
-            case record_request_for_connection(Tid, Pid) of
-                {'EXIT', _} ->
-                    %% The selected process has shutdown
-                    find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe);
-                _ ->
-                    {ok, Pid}
+find_best_connection(Tid, Max_pipeline_size) ->
+    case ets:first(Tid) of
+        {Size, _Timestamp, Pid} = Key when Size < Max_pipeline_size ->
+            case record_request_for_connection(Tid, Key) of
+                true ->
+                    {ok, Pid};
+                false ->
+                    find_best_connection(Tid, Max_pipeline_size)
             end;
-         _ ->
-            find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe)
+        _ -> 
+            {error, retry_later}
     end.
 
 maybe_create_ets(#state{ets_tid = undefined} = State) ->
@@ -240,10 +246,25 @@ num_current_connections(Tid) ->
     catch ets:info(Tid, size).
 
 record_new_connection(Tid, Pid) ->
-    catch ets:insert(Tid, {Pid, 0}).
+    catch ets:insert(Tid, {new_key(Pid), undefined}).
 
-record_request_for_connection(Tid, Pid) ->
-    catch ets:update_counter(Tid, Pid, {2, 1, ?PIPELINE_MAX, ?PIPELINE_MAX}).
+record_request_for_connection(Tid, Key) ->
+    case ets:select_delete(Tid, ?KEY_MATCHSPEC_FOR_DELETE(Key)) of
+        1 ->
+            ets:insert(Tid, {incremented(Key), undefined}),
+            true;
+        _ ->
+            false
+    end.
+
+new_key(Pid) ->
+    {1, os:timestamp(), Pid}.
+
+incremented({Size, Timestamp, Pid}) ->
+    {Size + 1, Timestamp, Pid}.
+
+decremented({Size, _Timestamp, Pid}) ->
+    {Size - 1, os:timestamp(), Pid}.
 
 for_each_connection_pid(Tid, Fun) ->
     catch ets:foldl(fun({Pid, _}, _) -> Fun(Pid) end, undefined, Tid),
