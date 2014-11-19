@@ -70,13 +70,11 @@ init([Host, Port]) ->
     Max_pipe_sz = ibrowse:get_config_value({max_pipeline_size, Host, Port}, 10),
     put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
     put(ibrowse_trace_token, ["LB: ", Host, $:, integer_to_list(Port)]),
-    Tid = ets:new(?CONNECTIONS_LOCAL_TABLE, [public, ordered_set]),
     {ok, #state{parent_pid = whereis(ibrowse),
-		host = Host,
-		port = Port,
-		ets_tid = Tid,
-		max_pipeline_size = Max_pipe_sz,
-	        max_sessions = Max_sessions}}.
+                host = Host,
+                port = Port,
+                max_pipeline_size = Max_pipe_sz,
+                max_sessions = Max_sessions}}.
 
 spawn_connection(Lb_pid, Url,
 		 Max_sessions,
@@ -111,7 +109,6 @@ stop(Lb_pid) ->
 handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     gen_server:reply(_From, ok),
     {stop, normal, State};
-
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
     ets:foldl(fun({Pid, _, _}, Acc) ->
                       ibrowse_http_client:stop(Pid),
@@ -165,13 +162,9 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({'EXIT', Parent, _Reason}, #state{parent_pid = Parent} = State) ->
     {stop, normal, State};
-
 handle_info({'EXIT', _Pid, _Reason}, #state{ets_tid = undefined} = State) ->
     {noreply, State};
-
-handle_info({'EXIT', Pid, _Reason},
-	    #state{num_cur_sessions = Cur,
-		   ets_tid = Tid} = State) ->
+handle_info({'EXIT', Pid, _Reason}, #state{num_cur_sessions = Cur, ets_tid = Tid} = State) ->
     ets:match_delete(Tid, {{'_', Pid}, '_'}),
     Cur_1 = Cur - 1,
     case Cur_1 of
@@ -185,7 +178,6 @@ handle_info({'EXIT', Pid, _Reason},
 handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
     {noreply, State};
-
 handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
     ets:foldl(fun({{_, Pid}, _}, Acc) when is_pid(Pid) ->
 		      catch Pid ! {trace, Bool},
