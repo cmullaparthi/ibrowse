@@ -19,6 +19,7 @@
          start/1,
          start/2,
          stop/1,
+         trace/2,
          send_req/7
         ]).
 
@@ -100,6 +101,9 @@ stop(Conn_pid) ->
         _ ->
             ok
     end.
+
+trace(Conn_pid, Bool) ->
+    catch Conn_pid ! {trace, Bool}.
 
 send_req(Conn_Pid, Url, Headers, Method, Body, Options, Timeout) ->
     gen_server:call(

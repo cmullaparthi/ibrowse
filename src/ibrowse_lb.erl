@@ -122,10 +122,7 @@ handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     gen_server:reply(_From, ok),
     {stop, normal, State};
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({Pid, _}, Acc) ->
-                  ibrowse_http_client:stop(Pid),
-                  Acc
-              end, [], Tid),
+    for_each_connection_pid(Tid, fun(Pid) -> ibrowse_http_client:stop(Pid) end),
     gen_server:reply(_From, ok),
     {stop, normal, State};
 
@@ -172,10 +169,7 @@ handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     put(my_trace_flag, Bool),
     {noreply, State};
 handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
-    ets:foldl(fun({Pid, _}, Acc) when is_pid(Pid) ->
-		            catch Pid ! {trace, Bool},
-		            Acc
-	             end, undefined, Tid),
+    for_each_connection_pid(Tid, fun(Pid) -> ibrowse_http_client:trace(Pid, Bool) end),
     put(my_trace_flag, Bool),
     {noreply, State};
 
@@ -250,3 +244,7 @@ record_new_connection(Tid, Pid) ->
 
 record_request_for_connection(Tid, Pid) ->
     catch ets:update_counter(Tid, Pid, {2, 1, ?PIPELINE_MAX, ?PIPELINE_MAX}).
+
+for_each_connection_pid(Tid, Fun) ->
+    catch ets:foldl(fun({Pid, _}, _) -> Fun(Pid) end, undefined, Tid),
+    ok.
