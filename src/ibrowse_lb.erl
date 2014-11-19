@@ -5,19 +5,16 @@
 %%%
 %%% Created :  6 Mar 2008 by chandru <chandrashekhar.mullaparthi@t-mobile.co.uk>
 %%%-------------------------------------------------------------------
+
 -module(ibrowse_lb).
 -author(chandru).
 -behaviour(gen_server).
-%%--------------------------------------------------------------------
-%% Include files
-%%--------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
 %% External exports
 -export([
 	 start_link/1,
 	 spawn_connection/6,
-         stop/1
+     stop/1
 	]).
 
 %% gen_server callbacks
@@ -31,14 +28,13 @@
 	]).
 
 -record(state, {parent_pid,
-		ets_tid,
-		host,
-		port,
-		max_sessions,
-		max_pipeline_size,
-		num_cur_sessions = 0,
-                proc_state
-               }).
+                ets_tid,
+                host,
+                port,
+                max_sessions,
+                max_pipeline_size,
+                num_cur_sessions = 0,
+                proc_state}).
 
 -include("ibrowse.hrl").
 
@@ -52,39 +48,16 @@
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
 
-%%====================================================================
-%% Server functions
-%%====================================================================
-
-%%--------------------------------------------------------------------
-%% Function: init/1
-%% Description: Initiates the server
-%% Returns: {ok, State}          |
-%%          {ok, State, Timeout} |
-%%          ignore               |
-%%          {stop, Reason}
-%%--------------------------------------------------------------------
-init([Host, Port]) ->
-    process_flag(trap_exit, true),
-    Max_sessions = ibrowse:get_config_value({max_sessions, Host, Port}, 10),
-    Max_pipe_sz = ibrowse:get_config_value({max_pipeline_size, Host, Port}, 10),
-    put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
-    put(ibrowse_trace_token, ["LB: ", Host, $:, integer_to_list(Port)]),
-    {ok, #state{parent_pid = whereis(ibrowse),
-                host = Host,
-                port = Port,
-                max_pipeline_size = Max_pipe_sz,
-                max_sessions = Max_sessions}}.
-
-spawn_connection(Lb_pid, Url,
-		 Max_sessions,
-		 Max_pipeline_size,
-		 SSL_options,
-		 Process_options)
-  when is_pid(Lb_pid),
-       is_record(Url, url),
-       is_integer(Max_pipeline_size),
-       is_integer(Max_sessions) ->
+spawn_connection(Lb_pid,
+                 Url,
+                 Max_sessions,
+                 Max_pipeline_size,
+                 SSL_options,
+                 Process_options)
+                 when is_pid(Lb_pid),
+                      is_record(Url, url),
+                      is_integer(Max_pipeline_size),
+                      is_integer(Max_sessions) ->
     gen_server:call(Lb_pid,
 		    {spawn_connection, Url, Max_sessions, Max_pipeline_size, SSL_options, Process_options}).
 
@@ -95,6 +68,33 @@ stop(Lb_pid) ->
         ok ->
             ok
     end.
+
+%%====================================================================
+%% Server functions
+%%====================================================================
+%%--------------------------------------------------------------------
+%% Function: init/1
+%% Description: Initiates the server
+%% Returns: {ok, State}          |
+%%          {ok, State, Timeout} |
+%%          ignore               |
+%%          {stop, Reason}
+%%--------------------------------------------------------------------
+init([Host, Port]) ->
+    process_flag(trap_exit, true),
+
+    Max_sessions = ibrowse:get_config_value({max_sessions, Host, Port}, 10),
+    Max_pipe_sz = ibrowse:get_config_value({max_pipeline_size, Host, Port}, 10),
+
+    put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
+    put(ibrowse_trace_token, ["LB: ", Host, $:, integer_to_list(Port)]),
+
+    {ok, #state{parent_pid = whereis(ibrowse),
+                host = Host,
+                port = Port,
+                max_pipeline_size = Max_pipe_sz,
+                max_sessions = Max_sessions}}.
+
 %%--------------------------------------------------------------------
 %% Function: handle_call/3
 %% Description: Handling call messages
@@ -105,14 +105,13 @@ stop(Lb_pid) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-
 handle_call(stop, _From, #state{ets_tid = undefined} = State) ->
     gen_server:reply(_From, ok),
     {stop, normal, State};
 handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
     ets:foldl(fun({Pid, _, _}, Acc) ->
-                      ibrowse_http_client:stop(Pid),
-                      Acc
+                  ibrowse_http_client:stop(Pid),
+                  Acc
               end, [], Tid),
     gen_server:reply(_From, ok),
     {stop, normal, State};
@@ -122,15 +121,14 @@ handle_call(_, _From, #state{proc_state = shutting_down} = State) ->
 
 %% Update max_sessions in #state with supplied value
 handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _, _}, _From,
-	    #state{num_cur_sessions = Num} = State)
-    when Num >= Max_sess ->
+	        #state{num_cur_sessions = Num} = State)
+            when Num >= Max_sess ->
     State_1 = maybe_create_ets(State),
     Reply = find_best_connection(State_1#state.ets_tid, Max_pipe),
-    {reply, Reply, State_1#state{max_sessions = Max_sess,
-                                 max_pipeline_size = Max_pipe}};
+    {reply, Reply, State_1#state{max_sessions = Max_sess, max_pipeline_size = Max_pipe}};
 
 handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_options}, _From,
-	    #state{num_cur_sessions = Cur} = State) ->
+	        #state{num_cur_sessions = Cur} = State) ->
     State_1 = maybe_create_ets(State),
     Tid = State_1#state.ets_tid,
     {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}, Process_options),
@@ -180,11 +178,11 @@ handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
     {noreply, State};
 handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
     ets:foldl(fun({{_, Pid}, _}, Acc) when is_pid(Pid) ->
-		      catch Pid ! {trace, Bool},
-		      Acc;
-		 (_, Acc) ->
-		      Acc
-	      end, undefined, Tid),
+		            catch Pid ! {trace, Bool},
+		            Acc;
+		         (_, Acc) ->
+		            Acc
+	             end, undefined, Tid),
     put(my_trace_flag, Bool),
     {noreply, State};
 
@@ -253,3 +251,4 @@ maybe_create_ets(#state{ets_tid = undefined} = State) ->
     State#state{ets_tid = Tid};
 maybe_create_ets(State) ->
     State.
+
