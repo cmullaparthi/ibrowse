@@ -134,12 +134,12 @@ handle_call(_, _From, #state{proc_state = shutting_down} = State) ->
 handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_options}, _From, State) ->
     State_1 = maybe_create_ets(State),
     Tid = State_1#state.ets_tid,
-    Reply = case ets:info(Tid, size) of
+    Reply = case num_current_connections(Tid) of
         X when X >= Max_sess ->
             find_best_connection(Tid, Max_pipe);
         _ ->
             Result = {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}, Process_options),
-            ets:insert(Tid, {Pid, 0, 0}),
+            record_new_connection(Tid, Pid),
             Result
     end,
     {reply, Reply, State_1#state{max_sessions = Max_sess, max_pipeline_size = Max_pipe}};
@@ -226,7 +226,7 @@ find_best_connection(Pid, Tid, Max_pipe) ->
     case ets:lookup(Tid, Pid) of
         [{Pid, Cur_sz, Speculative_sz}] when Cur_sz < Max_pipe,
                                              Speculative_sz < Max_pipe ->
-            case catch ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}) of
+            case record_request_for_connection(Tid, Pid) of
                 {'EXIT', _} ->
                     %% The selected process has shutdown
                     find_best_connection(ets:next(Tid, Pid), Tid, Max_pipe);
@@ -243,3 +243,12 @@ maybe_create_ets(#state{ets_tid = undefined} = State) ->
 maybe_create_ets(State) ->
     State.
 
+%% Ets connection table utility methods
+num_current_connections(Tid) ->
+    catch ets:info(Tid, size).
+
+record_new_connection(Tid, Pid) ->
+    catch ets:insert(Tid, {Pid, 0, 0}).
+
+record_request_for_connection(Tid, Pid) ->
+    catch ets:update_counter(Tid, Pid, {3, 1, 9999999, 9999999}).
