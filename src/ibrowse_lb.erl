@@ -33,7 +33,6 @@
                 port,
                 max_sessions,
                 max_pipeline_size,
-                num_cur_sessions = 0,
                 proc_state}).
 
 -include("ibrowse.hrl").
@@ -119,23 +118,18 @@ handle_call(stop, _From, #state{ets_tid = Tid} = State) ->
 handle_call(_, _From, #state{proc_state = shutting_down} = State) ->
     {reply, {error, shutting_down}, State};
 
-%% Update max_sessions in #state with supplied value
-handle_call({spawn_connection, _Url, Max_sess, Max_pipe, _, _}, _From,
-	        #state{num_cur_sessions = Num} = State)
-            when Num >= Max_sess ->
-    State_1 = maybe_create_ets(State),
-    Reply = find_best_connection(State_1#state.ets_tid, Max_pipe),
-    {reply, Reply, State_1#state{max_sessions = Max_sess, max_pipeline_size = Max_pipe}};
-
-handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_options}, _From,
-	        #state{num_cur_sessions = Cur} = State) ->
+handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_options}, _From, State) ->
     State_1 = maybe_create_ets(State),
     Tid = State_1#state.ets_tid,
-    {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}, Process_options),
-    ets:insert(Tid, {Pid, 0, 0}),
-    {reply, {ok, Pid}, State_1#state{num_cur_sessions = Cur + 1,
-                                     max_sessions = Max_sess,
-                                     max_pipeline_size = Max_pipe}};
+    Reply = case ets:info(Tid, size) of
+        X when X >= Max_sess ->
+            find_best_connection(Tid, Max_pipe);
+        _ ->
+            Result = {ok, Pid} = ibrowse_http_client:start_link({Tid, Url, SSL_options}, Process_options),
+            ets:insert(Tid, {Pid, 0, 0}),
+            Result
+    end,
+    {reply, Reply, State_1#state{max_sessions = Max_sess, max_pipeline_size = Max_pipe}};
 
 handle_call(Request, _From, State) ->
     Reply = {unknown_request, Request},
@@ -162,15 +156,14 @@ handle_info({'EXIT', Parent, _Reason}, #state{parent_pid = Parent} = State) ->
     {stop, normal, State};
 handle_info({'EXIT', _Pid, _Reason}, #state{ets_tid = undefined} = State) ->
     {noreply, State};
-handle_info({'EXIT', Pid, _Reason}, #state{num_cur_sessions = Cur, ets_tid = Tid} = State) ->
+handle_info({'EXIT', Pid, _Reason}, #state{ets_tid = Tid} = State) ->
     ets:match_delete(Tid, {{'_', Pid}, '_'}),
-    Cur_1 = Cur - 1,
-    case Cur_1 of
+    case ets:info(Tid, size) of
 		  0 ->
 		      ets:delete(Tid),
-			  {noreply, State#state{ets_tid = undefined, num_cur_sessions = 0}, 10000};
+			  {noreply, State#state{ets_tid = undefined}, 10000};
 		  _ ->
-		      {noreply, State#state{num_cur_sessions = Cur_1}}
+		      {noreply, State}
 	      end;
 
 handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
