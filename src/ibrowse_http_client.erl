@@ -53,7 +53,7 @@
                 deleted_crlf = false, transfer_encoding,
                 chunk_size, chunk_size_buffer = <<>>,
                 recvd_chunk_size, interim_reply_sent = false,
-                lb_ets_tid, cur_pipeline_size = 0, prev_req_id
+                lb_ets_tid, prev_req_id
                }).
 
 -record(request, {url, method, options, from,
@@ -1938,18 +1938,16 @@ to_lower([], Acc) ->
 
 shutting_down(#state{lb_ets_tid = undefined}) ->
     ok;
-shutting_down(#state{lb_ets_tid = Tid,
-                     cur_pipeline_size = _Sz}) ->
+shutting_down(#state{lb_ets_tid = Tid}) ->
     catch ets:delete(Tid, self()).
 
 inc_pipeline_counter(#state{is_closing = true} = State) ->
     State;
 inc_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
-inc_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
-                           lb_ets_tid = Tid} = State) ->
+inc_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
     update_counter(Tid, self(), {2,1,99999,9999}),
-    State#state{cur_pipeline_size = Pipe_sz + 1}.
+    State.
 
 update_counter(Tid, Key, Args) ->
     ets:update_counter(Tid, Key, Args).
@@ -1958,8 +1956,7 @@ dec_pipeline_counter(#state{is_closing = true} = State) ->
     State;
 dec_pipeline_counter(#state{lb_ets_tid = undefined} = State) ->
     State;
-dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
-                            lb_ets_tid = Tid} = State) ->
+dec_pipeline_counter(#state{lb_ets_tid = Tid} = State) ->
     _ = try
 	    update_counter(Tid, self(), {2,-1,0,0}),
 	    update_counter(Tid, self(), {3,-1,0,0})
@@ -1967,7 +1964,7 @@ dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
 	    _:_ ->
 		ok
 	end,
-    State#state{cur_pipeline_size = Pipe_sz - 1}.
+    State.
 
 flatten([H | _] = L) when is_integer(H) ->
     L;
