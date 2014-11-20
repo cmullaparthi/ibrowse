@@ -39,7 +39,8 @@ running_server_fixture_test_() ->
         ?TIMEDTEST("Pipeline depth goes down with responses", pipeline_depth),
         ?TIMEDTEST("Timeout closes pipe", closing_pipes),
         ?TIMEDTEST("Requests are balanced over connections", balanced_connections),
-        ?TIMEDTEST("Pipeline too small signals retries", small_pipeline)
+        ?TIMEDTEST("Pipeline too small signals retries", small_pipeline),
+        ?TIMEDTEST("Dest status can be gathered", status)
      ]
     }.
 
@@ -126,6 +127,20 @@ small_pipeline() ->
     Response = ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS),
 
     ?assertEqual({error, retry_later}, Response).
+
+status() ->
+    MaxSessions = 10,
+    MaxPipeline = 10,
+    RequestsSent = 100,
+
+    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS) end,
+    times(RequestsSent, fun() -> spawn(Fun) end),
+
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),  %% Wait for everyone to get in line
+
+    ibrowse:show_dest_status(),
+    ibrowse:show_dest_status("http://localhost:8181").
+
 
 times(0, _) ->
     ok;
