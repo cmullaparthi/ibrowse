@@ -38,8 +38,9 @@
                 proc_state}).
 
 -define(PIPELINE_MAX, 99999).
+-define(MAX_RETRIES, 3).
 -define(KEY_MATCHSPEC_BY_PID(Pid), [{{{'_', '_', Pid}, '_'}, [], ['$_']}]).
--define(KEY_MATCHSPEC(Key), [{{Key, '_'}, [], ['$_']}]).
+-define(KEY_MATCHSPEC_BY_PID_FOR_DELETE(Pid), [{{{'_', '_', Pid}, '_'}, [], [true]}]).
 -define(KEY_MATCHSPEC_FOR_DELETE(Key), [{{Key, '_'}, [], [true]}]).
 
 -include("ibrowse.hrl").
@@ -77,22 +78,10 @@ stop(Lb_pid) ->
 
 report_connection_down(Tid) ->
     %% Don't cascade errors since Tid is really managed by other process
-    catch ets:select_delete(Tid, ?KEY_MATCHSPEC_BY_PID(self())).
+    catch ets:select_delete(Tid, ?KEY_MATCHSPEC_BY_PID_FOR_DELETE(self())).
 
 report_request_complete(Tid) ->
-    %% Don't cascade errors since Tid is really managed by other process
-    catch case ets:select(Tid, ?KEY_MATCHSPEC_BY_PID(self())) of
-        [MatchKey] ->
-            case ets:select_delete(Tid, ?KEY_MATCHSPEC_FOR_DELETE(MatchKey)) of
-                1 ->
-                    ets:insert(Tid, {decremented(MatchKey), undefined}),
-                    true;
-                _ ->
-                    false
-            end;
-        _ ->
-            false
-    end.
+    report_request_complete(Tid, ?MAX_RETRIES).
 
 %%====================================================================
 %% Server functions
@@ -223,13 +212,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 find_best_connection(Tid, Max_pipeline_size) ->
+    find_best_connection(Tid, Max_pipeline_size, ?MAX_RETRIES).
+
+find_best_connection(_Tid, _Max_pipeline_size, 0) ->
+    {error, retry_later};
+find_best_connection(Tid, Max_pipeline_size, RemainingRetries) ->
     case ets:first(Tid) of
         {Size, _Timestamp, Pid} = Key when Size < Max_pipeline_size ->
             case record_request_for_connection(Tid, Key) of
                 true ->
                     {ok, Pid};
                 false ->
-                    find_best_connection(Tid, Max_pipeline_size)
+                    find_best_connection(Tid, Max_pipeline_size, RemainingRetries - 1)
             end;
         _ -> 
             {error, retry_later}
@@ -256,6 +250,24 @@ record_request_for_connection(Tid, Key) ->
         _ ->
             false
     end.
+
+report_request_complete(_Tid, 0) ->
+    false;
+report_request_complete(Tid, RemainingRetries) ->
+    %% Don't cascade errors since Tid is really managed by other process
+    catch case ets:select(Tid, ?KEY_MATCHSPEC_BY_PID(self())) of
+        [MatchKey] ->
+            case ets:select_delete(Tid, ?KEY_MATCHSPEC_FOR_DELETE(MatchKey)) of
+                1 ->
+                    ets:insert(Tid, {decremented(MatchKey), undefined}),
+                    true;
+                _ ->
+                    report_request_complete(Tid, RemainingRetries - 1)
+            end;
+        _ ->
+            false
+    end.
+
 
 new_key(Pid) ->
     {1, os:timestamp(), Pid}.
