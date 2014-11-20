@@ -12,6 +12,9 @@
 
 -define(SERVER_PORT, 8181).
 -define(BASE_URL, "http://localhost:" ++ integer_to_list(?SERVER_PORT)).
+-define(SHORT_TIMEOUT_MS, 5000).
+-define(LONG_TIMEOUT_MS, 30000).
+-define(PAUSE_FOR_CONNECTIONS_MS, 2000).
 
 setup() ->
     application:start(crypto),
@@ -33,7 +36,10 @@ running_server_fixture_test_() ->
      [
         ?TIMEDTEST("Simple request can be honored", simple_request),
         ?TIMEDTEST("Slow server causes timeout", slow_server_timeout),
-        ?TIMEDTEST("Requests are balanced over connections", balanced_connections)
+        ?TIMEDTEST("Pipeline depth goes down with responses", pipeline_depth),
+        ?TIMEDTEST("Timeout closes pipe", closing_pipes),
+        ?TIMEDTEST("Requests are balanced over connections", balanced_connections),
+        ?TIMEDTEST("Pipeline too small signals retries", small_pipeline)
      ]
     }.
 
@@ -43,6 +49,44 @@ simple_request() ->
 slow_server_timeout() ->
     ?assertMatch({error, req_timedout}, ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [], 5000)).
 
+pipeline_depth() ->
+    MaxSessions = 2,
+    MaxPipeline = 2,
+    RequestsSent = 2,
+    EmptyPipelineDepth = 0,
+
+    ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()),
+
+    Fun = fun() -> ibrowse:send_req(?BASE_URL, [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS) end,
+    times(RequestsSent, fun() -> spawn_link(Fun) end),
+
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),
+
+    Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
+    ?assertEqual(MaxSessions, length(Counts)),
+    ?assertEqual(lists:duplicate(MaxSessions, EmptyPipelineDepth), Counts).
+
+closing_pipes() ->
+    MaxSessions = 2,
+    MaxPipeline = 2,
+    RequestsSent = 2,
+    BalancedNumberOfRequestsPerConnection = 1,
+
+    ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()),
+
+    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS) end,
+    times(RequestsSent, fun() -> spawn_link(Fun) end),
+
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),
+
+    Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
+    ?assertEqual(MaxSessions, length(Counts)),
+    ?assertEqual(lists:duplicate(MaxSessions, BalancedNumberOfRequestsPerConnection), Counts),
+
+    timer:sleep(?SHORT_TIMEOUT_MS),
+
+    ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()).
+
 balanced_connections() ->
     MaxSessions = 4,
     MaxPipeline = 100,
@@ -51,15 +95,37 @@ balanced_connections() ->
 
     ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()),
 
-    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], 30000) end,
+    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?LONG_TIMEOUT_MS) end,
     times(RequestsSent, fun() -> spawn_link(Fun) end),
 
-    timer:sleep(1000),
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),
 
     Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
     ?assertEqual(MaxSessions, length(Counts)),
 
     ?assertEqual(lists:duplicate(MaxSessions, BalancedNumberOfRequestsPerConnection), Counts).
+
+small_pipeline() ->
+    MaxSessions = 10,
+    MaxPipeline = 10,
+    RequestsSent = 100,
+    FullRequestsPerConnection = 10,
+
+    ?assertEqual([], ibrowse_test_server:get_conn_pipeline_depth()),
+
+    Fun = fun() -> ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS) end,
+    times(RequestsSent, fun() -> spawn(Fun) end),
+
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),  %% Wait for everyone to get in line
+
+    Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
+    ?assertEqual(MaxSessions, length(Counts)),
+
+    ?assertEqual(lists:duplicate(MaxSessions, FullRequestsPerConnection), Counts),
+
+    Response = ibrowse:send_req(?BASE_URL ++ "/never_respond", [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS),
+
+    ?assertEqual({error, retry_later}, Response).
 
 times(0, _) ->
     ok;

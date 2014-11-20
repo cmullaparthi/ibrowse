@@ -68,11 +68,7 @@ do_accept(ssl, Listen_sock) ->
 accept_loop(Sock, Sock_type) ->
     case do_accept(Sock_type, Sock) of
         {ok, Conn} ->
-            Pid = spawn_link(
-              fun() ->
-                      server_loop(Conn, Sock_type, #request{})
-              end),
-            ets:insert(?CONN_PIPELINE_DEPTH, {Pid, 0}),
+            Pid = spawn_link(fun() -> connection(Conn, Sock_type) end),
             set_controlling_process(Conn, Sock_type, Pid),
             Pid ! {setopts, [{active, true}]},
             accept_loop(Sock, Sock_type);
@@ -85,6 +81,14 @@ accept_loop(Sock, Sock_type) ->
             end;
         Err ->
             Err
+    end.
+
+connection(Conn, Sock_type) ->
+    ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
+    try
+        server_loop(Conn, Sock_type, #request{})
+    after
+        ets:delete(?CONN_PIPELINE_DEPTH, self())
     end.
 
 set_controlling_process(Sock, tcp, Pid) ->
@@ -100,14 +104,19 @@ setopts(Sock, ssl, Opts) ->
 server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
     receive
         {http, Sock, {http_request, HttpMethod, HttpUri, HttpVersion}} ->
+            ets:update_counter(?CONN_PIPELINE_DEPTH, self(), 1),
             server_loop(Sock, Sock_type, Req#request{method = HttpMethod,
                                                      uri = HttpUri,
                                                      version = HttpVersion});
         {http, Sock, {http_header, _, _, _, _} = H} ->
             server_loop(Sock, Sock_type, Req#request{headers = [H | Headers]});
         {http, Sock, http_eoh} ->
-            ets:update_counter(?CONN_PIPELINE_DEPTH, self(), 1),
-            process_request(Sock, Sock_type, Req),
+            case process_request(Sock, Sock_type, Req) of
+                not_done ->
+                    ok;
+                _ ->
+                    ets:update_counter(?CONN_PIPELINE_DEPTH, self(), -1)
+            end,
             server_loop(Sock, Sock_type, #request{});
         {http, Sock, {http_error, Err}} ->
             do_trace("Error parsing HTTP request:~n"
@@ -172,7 +181,6 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_head_transfer_enc"}}) ->
     Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nContent-Length:5\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
-
 process_request(Sock, Sock_type,
                 #request{method='GET',
                          headers = Headers,
@@ -210,7 +218,7 @@ process_request(Sock, Sock_type,
     Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\nContent-Length: 5\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
 process_request(_Sock, _Sock_type, #request{uri = {abs_path, "/never_respond"} } ) ->
-    noop;
+    not_done;
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
@@ -220,7 +228,6 @@ do_send(Sock, tcp, Resp) ->
     gen_tcp:send(Sock, Resp);
 do_send(Sock, ssl, Resp) ->
     ssl:send(Sock, Resp).
-
 
 %%------------------------------------------------------------------------------
 %% Utility functions
