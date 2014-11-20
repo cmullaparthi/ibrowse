@@ -1,6 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% File    : ibrowse_lb.erl
 %%% Author  : chandru <chandrashekhar.mullaparthi@t-mobile.co.uk>
+%%%           Benjamin Lee <http://github.com/benjaminplee>
+%%%           Dan Schwabe <http://github.com/dfschwabe>
+%%%           Brian Richards <http://github.com/richbria>
 %%% Description : 
 %%%
 %%% Created :  6 Mar 2008 by chandru <chandrashekhar.mullaparthi@t-mobile.co.uk>

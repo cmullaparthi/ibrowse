@@ -1,7 +1,8 @@
 %%% File    : ibrowse_test_server.erl
 %%% Author  : Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
-%%%           Benjamin Lee <yardspoon@gmail.com>
-%%%           Brian Richards <bmrichards16@gmail.com>
+%%%           Benjamin Lee <http://github.com/benjaminplee>
+%%%           Dan Schwabe <http://github.com/dfschwabe>
+%%%           Brian Richards <http://github.com/richbria>
 %%% Description : A server to simulate various test scenarios
 %%% Created : 17 Oct 2010 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 

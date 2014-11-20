@@ -1,6 +1,7 @@
 %%% File    : ibrowse_functional_tests.erl
-%%% Authors : Benjamin Lee <yardspoon@gmail.com>
-%%%           Brian Richards <bmrichards16@gmail.com>
+%%% Authors : Benjamin Lee <http://github.com/benjaminplee>
+%%%           Dan Schwabe <http://github.com/dfschwabe>
+%%%           Brian Richards <http://github.com/richbria>
 %%% Description : Functional tests of the ibrowse library using a live test HTTP server
 %%% Created : 18 November 2014 by Benjamin Lee <yardspoon@gmail.com>
 

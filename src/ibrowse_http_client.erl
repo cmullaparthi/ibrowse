@@ -1,6 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% File    : ibrowse_http_client.erl
 %%% Author  : Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
+%%%           Benjamin Lee <http://github.com/benjaminplee>
+%%%           Dan Schwabe <http://github.com/dfschwabe>
+%%%           Brian Richards <http://github.com/richbria>
 %%% Description : The name says it all
 %%%
 %%% Created : 11 Oct 2003 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
