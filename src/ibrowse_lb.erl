@@ -259,7 +259,7 @@ report_request_complete(_Tid, 0) ->
 report_request_complete(Tid, RemainingRetries) ->
     %% Don't cascade errors since Tid is really managed by other process
     catch case ets:select(Tid, ?KEY_MATCHSPEC_BY_PID(self())) of
-        [MatchKey] ->
+        [{MatchKey, _}] ->
             case ets:select_delete(Tid, ?KEY_MATCHSPEC_FOR_DELETE(MatchKey)) of
                 1 ->
                     ets:insert(Tid, {decremented(MatchKey), undefined}),

@@ -38,6 +38,7 @@ running_server_fixture_test_() ->
         ?TIMEDTEST("Simple request can be honored", simple_request),
         ?TIMEDTEST("Slow server causes timeout", slow_server_timeout),
         ?TIMEDTEST("Pipeline depth goes down with responses", pipeline_depth),
+        ?TIMEDTEST("Pipelines refill", pipeline_refill),
         ?TIMEDTEST("Timeout closes pipe", closing_pipes),
         ?TIMEDTEST("Requests are balanced over connections", balanced_connections),
         ?TIMEDTEST("Pipeline too small signals retries", small_pipeline),
@@ -67,6 +68,26 @@ pipeline_depth() ->
     Counts = [Count || {_Pid, Count} <- ibrowse_test_server:get_conn_pipeline_depth()],
     ?assertEqual(MaxSessions, length(Counts)),
     ?assertEqual(lists:duplicate(MaxSessions, EmptyPipelineDepth), Counts).
+
+pipeline_refill() ->
+    MaxSessions = 2,
+    MaxPipeline = 2,
+    RequestsToFill = MaxSessions * MaxPipeline,
+
+    %% Send off enough requests to fill sessions and pipelines in rappid succession
+    Fun = fun() -> ibrowse:send_req(?BASE_URL, [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS) end,
+    times(RequestsToFill, fun() -> spawn_link(Fun) end),
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),
+
+    % Verify that connections properly reported their completed responses and can still accept more
+    ?assertMatch({ok, "200", _, _}, ibrowse:send_req(?BASE_URL, [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS)),
+
+    % and do it again to make sure we really are clear
+    times(RequestsToFill, fun() -> spawn_link(Fun) end),
+    timer:sleep(?PAUSE_FOR_CONNECTIONS_MS),
+
+    % Verify that connections properly reported their completed responses and can still accept more
+    ?assertMatch({ok, "200", _, _}, ibrowse:send_req(?BASE_URL, [], get, [], [{max_sessions, MaxSessions}, {max_pipeline_size, MaxPipeline}], ?SHORT_TIMEOUT_MS)).
 
 closing_pipes() ->
     MaxSessions = 2,
