@@ -85,11 +85,11 @@ accept_loop(Sock, Sock_type) ->
     end.
 
 connection(Conn, Sock_type) ->
-    ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
+    catch ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
     try
         server_loop(Conn, Sock_type, #request{})
     after
-        ets:delete(?CONN_PIPELINE_DEPTH, self())
+        catch ets:delete(?CONN_PIPELINE_DEPTH, self())
     end.
 
 set_controlling_process(Sock, tcp, Pid) ->
