@@ -282,5 +282,5 @@ decremented({Size, _Timestamp, Pid}) ->
     {Size - 1, os:timestamp(), Pid}.
 
 for_each_connection_pid(Tid, Fun) ->
-    catch ets:foldl(fun({Pid, _}, _) -> Fun(Pid) end, undefined, Tid),
+    ets:foldl(fun({{_, _, Pid}, _}, _) -> Fun(Pid) end, undefined, Tid),
     ok.
