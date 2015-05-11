@@ -90,6 +90,7 @@
          stream_close/1,
          set_max_sessions/3,
          set_max_pipeline_size/3,
+         set_max_attempts/3,
          set_dest/3,
          trace_on/0,
          trace_off/0,
@@ -120,6 +121,7 @@
 
 -define(DEF_MAX_SESSIONS,10).
 -define(DEF_MAX_PIPELINE_SIZE,10).
+-define(DEF_MAX_ATTEMPTS,3).
 
 %%====================================================================
 %% External functions
@@ -292,7 +294,8 @@ send_req(Url, Headers, Method, Body) ->
 %%          {preserve_chunked_encoding,boolean()}     |
 %%          {workaround, head_response_with_body}     |
 %%          {worker_process_options, list()} |
-%%          {return_raw_request, true}
+%%          {return_raw_request, true}         |
+%%          {max_attempts, integer()}
 %%
 %% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()
@@ -325,6 +328,7 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
                      end,
             Max_sessions = get_max_sessions(Host, Port, Options),
             Max_pipeline_size = get_max_pipeline_size(Host, Port, Options),
+            Max_attempts = get_max_attempts(Host, Port, Options),
             Options_1 = merge_options(Host, Port, Options),
             {SSLOptions, IsSSL} =
                 case (Protocol == https) orelse
@@ -336,7 +340,7 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
                                 Max_sessions, 
                                 Max_pipeline_size,
                                 {SSLOptions, IsSSL}, 
-                                Headers, Method, Body, Options_1, Timeout, 0);
+                                Headers, Method, Body, Options_1, Timeout, Max_attempts, 0);
         Err ->
             {error, {url_parsing_failed, Err}}
     end.
@@ -345,7 +349,7 @@ try_routing_request(Lb_pid, Parsed_url,
                     Max_sessions, 
                     Max_pipeline_size,
                     {SSLOptions, IsSSL}, 
-                    Headers, Method, Body, Options_1, Timeout, Try_count) when Try_count < 3 ->
+                    Headers, Method, Body, Options_1, Timeout, Max_attempts, Try_count) when Try_count < Max_attempts ->
     ProcessOptions = get_value(worker_process_options, Options_1, []),
     case ibrowse_lb:spawn_connection(Lb_pid, Parsed_url,
                                              Max_sessions, 
@@ -360,14 +364,14 @@ try_routing_request(Lb_pid, Parsed_url,
                                         Max_sessions, 
                                         Max_pipeline_size,
                                         {SSLOptions, IsSSL}, 
-                                        Headers, Method, Body, Options_1, Timeout, Try_count + 1);
+                                        Headers, Method, Body, Options_1, Timeout, Max_attempts, Try_count + 1);
                 Res ->
                     Res
             end;
         Err ->
             Err
     end;
-try_routing_request(_, _, _, _, _, _, _, _, _, _, _) ->
+try_routing_request(_, _, _, _, _, _, _, _, _, _, _, _) ->
     {error, retry_later}.
 
 merge_options(Host, Port, Options) ->
@@ -396,11 +400,19 @@ get_max_pipeline_size(Host, Port, Options) ->
               get_config_value({max_pipeline_size, Host, Port},
                                default_max_pipeline_size())).
 
+get_max_attempts(Host, Port, Options) ->
+    get_value(max_attempts, Options,
+              get_config_value({max_attempts, Host, Port},
+                               default_max_attempts())).
+
 default_max_sessions() ->
     safe_get_env(ibrowse, default_max_sessions, ?DEF_MAX_SESSIONS).
 
 default_max_pipeline_size() ->
     safe_get_env(ibrowse, default_max_pipeline_size, ?DEF_MAX_PIPELINE_SIZE).
+
+default_max_attempts() ->
+    safe_get_env(ibrowse, default_max_attempts, ?DEF_MAX_ATTEMPTS).
 
 safe_get_env(App, Key, Def_val) ->
     case application:get_env(App, Key) of
@@ -435,6 +447,11 @@ set_max_sessions(Host, Port, Max) when is_integer(Max), Max > 0 ->
 %% @spec set_max_pipeline_size(Host::string(), Port::integer(), Max::integer()) -> ok
 set_max_pipeline_size(Host, Port, Max) when is_integer(Max), Max > 0 ->
     gen_server:call(?MODULE, {set_config_value, {max_pipeline_size, Host, Port}, Max}).
+
+%% @doc Set the maximum attempts for each connection to a specific Host:Port.
+%% @spec set_max_attempts(Host::string(), Port::integer(), Max::integer()) -> ok
+set_max_attempts(Host, Port, Max) when is_integer(Max), Max > 0 ->
+    gen_server:call(?MODULE, {set_config_value, {max_attempts, Host, Port}, Max}).
 
 do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
     case catch ibrowse_http_client:send_req(Conn_Pid, Parsed_url,
