@@ -1923,7 +1923,7 @@ cancel_timer(Ref, {eat_message, Msg}) ->
     end.
 
 make_req_id() ->
-    case catch erlang:unqiue_integer() of
+    case catch erlang:unique_integer() of
         {'EXIT', _} ->
             erlang:apply(erlang, now, []);
         V ->
