@@ -1,5 +1,14 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+03-08-2015 - v4.1.2
+             * R18 compatibility fix
+               https://github.com/cmullaparthi/ibrowse/issues/129
+             * Add max_attempts option
+               https://github.com/cmullaparthi/ibrowse/pull/125
+             * Fix for https://github.com/cmullaparthi/ibrowse/pull/120
+             * Enhanced SOCKS5 support
+               https://github.com/cmullaparthi/ibrowse/pull/117
+
 10-07-2014 - v4.1.1
              * Added support for accepting binaries as header names
              * Fix for https://github.com/cmullaparthi/ibrowse/issues/110
