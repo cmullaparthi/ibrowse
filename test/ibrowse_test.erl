@@ -266,8 +266,9 @@ unit_tests() ->
 
 unit_tests(Options, Test_list) ->
     application:start(crypto),
+    application:start(asn1),
     application:start(public_key),
-    application:ensure_all_started(ssl),
+    application:start(ssl),
     (catch ibrowse_test_server:start_server(8181, tcp)),
     application:start(ibrowse),
     Options_1 = Options ++ [{connect_timeout, 5000}],
