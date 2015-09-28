@@ -15,9 +15,11 @@ install: compile
 	mkdir -p $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 	cp -r ebin $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 
-test: all
+eunit_test: all
 	./rebar eunit
-	erl -noshell -pa .eunit -pa test -s ibrowse -s ibrowse_test unit_tests \
+
+test: all
+	erl -noshell -pa test -pa ebin -s ibrowse_test unit_tests \
 	-s ibrowse_test verify_chunked_streaming \
 	-s ibrowse_test test_chunked_streaming_once \
 	-s erlang halt

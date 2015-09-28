@@ -2021,12 +2021,12 @@ dec_pipeline_counter(#state{cur_pipeline_size = Pipe_sz,
                             proc_state        = Proc_state} = State) when Tid /= undefined,
                                                                           Proc_state /= ?dead_proc_walking ->
     Ts = os:timestamp(),
+    catch ets:insert(Tid, {{Pipe_sz - 1, os:timestamp(), self()}, []}),
     (catch ets:select_delete(Tid, [{{{'_', '$2', '$1'},'_'},
                                     [{'==', '$1', {const,self()}},
                                      {'<',  '$2', {const,Ts}}
                                     ],
                                     [true]}])),
-    catch ets:insert(Tid, {{Pipe_sz - 1, os:timestamp(), self()}, []}),
     State#state{cur_pipeline_size = Pipe_sz - 1};
 dec_pipeline_counter(State) ->
     State.

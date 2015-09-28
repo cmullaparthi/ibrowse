@@ -124,17 +124,17 @@ handle_call({spawn_connection, Url, Max_sess, Max_pipe, SSL_options, Process_opt
     State_1   = maybe_create_ets(State),
     Tid       = State_1#state.ets_tid,
     Tid_size  = ets:info(Tid, size),
-    case Tid_size > Max_sess of
+    case Tid_size >= Max_sess of
         true ->
-            Reply = find_best_connection(Tid, Max_pipe, Tid_size),
+            Reply = find_best_connection(Tid, Max_pipe),
             {reply, Reply, State_1#state{max_sessions      = Max_sess,
                                          max_pipeline_size = Max_pipe}};
         false ->
             {ok, Pid} = ibrowse_http_client:start({Tid, Url, SSL_options}, Process_options),
             Ts = os:timestamp(),
-            ets:insert(Tid, {{0, Ts, Pid}, []}),
-            {reply, {ok, {0, Ts, Pid}}, State_1#state{max_sessions      = Max_sess,
-                                                  max_pipeline_size = Max_pipe}}
+            ets:insert(Tid, {{1, Ts, Pid}, []}),
+            {reply, {ok, {1, Ts, Pid}}, State_1#state{max_sessions      = Max_sess,
+						      max_pipeline_size = Max_pipe}}
     end;
 
 handle_call(Request, _From, State) ->
@@ -215,18 +215,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-find_best_connection(Tid, Max_pipe, _Num_cur) ->
+find_best_connection(Tid, Max_pipe) ->
     case ets:first(Tid) of
-        {Spec_size, Ts, Pid} = First ->
-            case Spec_size >= Max_pipe of
-                true ->
-                    {error, retry_later};
-                false ->
-                    ets:delete(Tid, First),
-                    ets:insert(Tid, {{Spec_size + 1, Ts, Pid}, []}),
-                    {ok, First}
-            end;
-        '$end_of_table' ->
+        {Spec_size, Ts, Pid} = First when Spec_size < Max_pipe ->
+	    ets:delete(Tid, First),
+	    ets:insert(Tid, {{Spec_size + 1, Ts, Pid}, []}),
+	    {ok, First};
+        _ ->
             {error, retry_later}
     end.
 

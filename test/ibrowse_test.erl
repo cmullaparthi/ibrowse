@@ -40,7 +40,7 @@
          test_retry_of_requests/1
 	]).
 
--include("ibrowse.hrl").
+-include_lib("ibrowse/include/ibrowse.hrl").
 
 test_stream_once(Url, Method, Options) ->
     test_stream_once(Url, Method, Options, 5000).
@@ -257,17 +257,17 @@ dump_errors(Key, Iod) ->
 		   ] ++ ?LOCAL_TESTS).
 
 local_unit_tests() ->
-    error_logger:tty(false),
-    unit_tests([], ?LOCAL_TESTS),
-    error_logger:tty(true).
+    unit_tests([], ?LOCAL_TESTS).
 
 unit_tests() ->
-    unit_tests([], ?TEST_LIST).
+    error_logger:tty(false),
+    unit_tests([], ?TEST_LIST),
+    error_logger:tty(true).
 
 unit_tests(Options, Test_list) ->
     application:start(crypto),
     application:start(public_key),
-    application:start(ssl),
+    application:ensure_all_started(ssl),
     (catch ibrowse_test_server:start_server(8181, tcp)),
     application:start(ibrowse),
     Options_1 = Options ++ [{connect_timeout, 5000}],
@@ -386,6 +386,8 @@ wait_for_resp(Pid) ->
 	{'DOWN', _, _, Pid, Reason} ->
 	    {'EXIT', Reason};
 	{'DOWN', _, _, _, _} ->
+	    wait_for_resp(Pid);
+	{'EXIT', _, normal} ->
 	    wait_for_resp(Pid);
 	Msg ->
 	    io:format("Recvd unknown message: ~p~n", [Msg]),
@@ -564,6 +566,7 @@ test_retry_of_requests() ->
     test_retry_of_requests("http://localhost:8181/ibrowse_handle_one_request_only_with_delay").
 
 test_retry_of_requests(Url) ->
+    reset_ibrowse(),
     Timeout_1 = 2050,
     Res_1 = test_retry_of_requests(Url, Timeout_1),
     case lists:filter(fun({_Pid, {ok, "200", _, _}}) ->
@@ -586,7 +589,6 @@ test_retry_of_requests(Url) ->
         _ ->
             exit({failed, Timeout_1, Res_1})
     end,
-    reset_ibrowse(),
     Timeout_2 = 2200,
     Res_2 = test_retry_of_requests(Url, Timeout_2),
     case lists:filter(fun({_Pid, {ok, "200", _, _}}) ->
@@ -604,10 +606,10 @@ test_retry_of_requests(Url) ->
                 true ->
                     ok;
                 false ->
-                    exit({failed, Timeout_2, Res_2})
+                    exit({failed, {?MODULE, ?LINE}, Timeout_2, Res_2})
             end;
         _ ->
-            exit({failed, Timeout_2, Res_2})
+            exit({failed, {?MODULE, ?LINE}, Timeout_2, Res_2})
     end,
     success.
 

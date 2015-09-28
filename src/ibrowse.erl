@@ -651,7 +651,7 @@ show_dest_status() ->
     io:format("~80.80.=s~n", [""]),
     Metrics = get_metrics(),
     lists:foreach(
-      fun({Host, Port, Lb_pid, Tid, Size}) ->
+      fun({Host, Port, {Lb_pid, _, Tid, Size, _}}) ->
               io:format("~40.40s | ~-5.5s | ~-5.5s | ~p~n",
                         [Host ++ ":" ++ integer_to_list(Port),
                          integer_to_list(Tid),
@@ -697,7 +697,7 @@ get_metrics() ->
       fun(#lb_pid{host_port = {X_host, X_port}}, X_acc) ->
               case get_metrics(X_host, X_port) of
                   {_, _, _, _, _} = X_res ->
-                      [X_res | X_acc];
+                      [{X_host, X_port, X_res} | X_acc];
                   _X_res ->
                       X_acc
               end
@@ -708,7 +708,12 @@ get_metrics(Host, Port) ->
         [] ->
             no_active_processes;
         [#lb_pid{pid = Lb_pid, ets_tid = Tid}] ->
-            MsgQueueSize = (catch process_info(Lb_pid, message_queue_len)),
+            MsgQueueSize = case (catch process_info(Lb_pid, message_queue_len)) of
+			       {message_queue_len, Msg_q_len} ->
+				   Msg_q_len;
+			       _ ->
+				   -1
+			   end,
             case Tid of
                 undefined ->
                     {Lb_pid, MsgQueueSize, undefined, 0, {{0, 0}, {0, 0}}};

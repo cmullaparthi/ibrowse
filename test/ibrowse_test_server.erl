@@ -1,48 +1,59 @@
 %%% File    : ibrowse_test_server.erl
 %%% Author  : Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
+%%%           Benjamin Lee <http://github.com/benjaminplee>
+%%%           Dan Schwabe <http://github.com/dfschwabe>
+%%%           Brian Richards <http://github.com/richbria>
 %%% Description : A server to simulate various test scenarios
 %%% Created : 17 Oct 2010 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 
 -module(ibrowse_test_server).
 -export([
          start_server/2,
-         stop_server/1
+         stop_server/1,
+         get_conn_pipeline_depth/0
         ]).
 
 -record(request, {method, uri, version, headers = [], body = []}).
 
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
+-define(ACCEPT_TIMEOUT_MS, 1000).
+-define(CONN_PIPELINE_DEPTH, conn_pipeline_depth).
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
-        Proc_name = server_proc_name(Port),
-        case whereis(Proc_name) of
-            undefined ->
-                register(Proc_name, self()),
-                case do_listen(Sock_type, Port, [{active, false},
-                    {reuseaddr, true},
-                    {nodelay, true},
-                    {packet, http}]) of
-                    {ok, Sock} ->
-                        do_trace("Server listening on port: ~p~n", [Port]),
-                        accept_loop(Sock, Sock_type);
-                    Err ->
-                        erlang:error(
-                            lists:flatten(
-                                io_lib:format(
-                                    "Failed to start server on port ~p. ~p~n",
-                                    [Port, Err]))),
-                        exit({listen_error, Err})
-                end;
-            _X ->
-                ok
-        end
-    end,
+		  Proc_name = server_proc_name(Port),
+		  case whereis(Proc_name) of
+		      undefined ->
+			  register(Proc_name, self()),
+			  ets:new(?CONN_PIPELINE_DEPTH, [named_table, public, set]),
+			  case do_listen(Sock_type, Port, [{active, false},
+							   {reuseaddr, true},
+							   {nodelay, true},
+							   {packet, http}]) of
+			      {ok, Sock} ->
+				  do_trace("Server listening on port: ~p~n", [Port]),
+				  accept_loop(Sock, Sock_type);
+			      Err ->
+				  erlang:error(
+				    lists:flatten(
+				      io_lib:format(
+					"Failed to start server on port ~p. ~p~n",
+					[Port, Err]))),
+				  exit({listen_error, Err})
+			  end;
+		      _X ->
+			  ok
+		  end
+	  end,
     spawn_link(Fun).
 
 stop_server(Port) ->
     server_proc_name(Port) ! stop,
+    timer:sleep(2000),  % wait for server to receive msg and unregister
     ok.
+
+get_conn_pipeline_depth() ->
+    ets:tab2list(?CONN_PIPELINE_DEPTH).
 
 server_proc_name(Port) ->
     list_to_atom("ibrowse_test_server_"++integer_to_list(Port)).
@@ -55,22 +66,34 @@ do_listen(ssl, Port, Opts) ->
     ssl:listen(Port, Opts).
 
 do_accept(tcp, Listen_sock) ->
-    gen_tcp:accept(Listen_sock);
+    gen_tcp:accept(Listen_sock, ?ACCEPT_TIMEOUT_MS);
 do_accept(ssl, Listen_sock) ->
-    ssl:ssl_accept(Listen_sock).
+    ssl:ssl_accept(Listen_sock, ?ACCEPT_TIMEOUT_MS).
 
 accept_loop(Sock, Sock_type) ->
     case do_accept(Sock_type, Sock) of
         {ok, Conn} ->
-            Pid = spawn_link(
-              fun() ->
-                      server_loop(Conn, Sock_type, #request{})
-              end),
+            Pid = spawn_link(fun() -> connection(Conn, Sock_type) end),
             set_controlling_process(Conn, Sock_type, Pid),
             Pid ! {setopts, [{active, true}]},
             accept_loop(Sock, Sock_type);
+        {error, timeout} ->
+            receive
+                stop ->
+                    ok
+            after 10 ->
+                accept_loop(Sock, Sock_type)
+            end;
         Err ->
             Err
+    end.
+
+connection(Conn, Sock_type) ->
+    catch ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
+    try
+        server_loop(Conn, Sock_type, #request{})
+    after
+        catch ets:delete(?CONN_PIPELINE_DEPTH, self())
     end.
 
 set_controlling_process(Sock, tcp, Pid) ->
@@ -86,6 +109,7 @@ setopts(Sock, ssl, Opts) ->
 server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
     receive
         {http, Sock, {http_request, HttpMethod, HttpUri, HttpVersion}} ->
+            catch ets:update_counter(?CONN_PIPELINE_DEPTH, self(), 1),
             server_loop(Sock, Sock_type, Req#request{method = HttpMethod,
                                                      uri = HttpUri,
                                                      version = HttpVersion});
@@ -95,9 +119,12 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
             case process_request(Sock, Sock_type, Req) of
                 close_connection ->
                     gen_tcp:shutdown(Sock, read_write);
+                not_done ->
+                    ok;
                 _ ->
-                    server_loop(Sock, Sock_type, #request{})
-            end;
+                    catch ets:update_counter(?CONN_PIPELINE_DEPTH, self(), -1)
+            end,
+            server_loop(Sock, Sock_type, #request{});
         {http, Sock, {http_error, Err}} ->
             io:format("Error parsing HTTP request:~n"
                       "Req so far : ~p~n"
@@ -108,8 +135,6 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
             server_loop(Sock, Sock_type, Req);
         {tcp_closed, Sock} ->
             do_trace("Client closed connection~n", []),
-            ok;
-        stop ->
             ok;
         Other ->
             io:format("Recvd unknown msg: ~p~n", [Other]),
@@ -163,7 +188,6 @@ process_request(Sock, Sock_type,
                          uri = {abs_path, "/ibrowse_head_transfer_enc"}}) ->
     Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nContent-Length:5\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
-
 process_request(Sock, Sock_type,
                 #request{method='GET',
                          headers = Headers,
@@ -215,6 +239,8 @@ process_request(Sock, Sock_type,
     Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp),
     close_connection;
+process_request(_Sock, _Sock_type, #request{uri = {abs_path, "/never_respond"} } ) ->
+    not_done;
 process_request(Sock, Sock_type, Req) ->
     do_trace("Recvd req: ~p~n", [Req]),
     Resp = <<"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n">>,
@@ -225,7 +251,6 @@ do_send(Sock, tcp, Resp) ->
     gen_tcp:send(Sock, Resp);
 do_send(Sock, ssl, Resp) ->
     ssl:send(Sock, Resp).
-
 
 %%------------------------------------------------------------------------------
 %% Utility functions
