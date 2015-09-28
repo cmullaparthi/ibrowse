@@ -19,6 +19,7 @@ eunit_test: all
 	./rebar eunit
 
 test: all
+	cd test; erl -pa ../../ibrowse/ebin -make; cd ../; \
 	erl -noshell -pa test -pa ebin -s ibrowse_test unit_tests \
 	-s ibrowse_test verify_chunked_streaming \
 	-s ibrowse_test test_chunked_streaming_once \
