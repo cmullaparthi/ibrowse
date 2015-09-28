@@ -28,7 +28,8 @@
          get_value/2,
          get_value/3,
          parse_url/1,
-         printable_date/0
+         printable_date/0,
+         printable_date/1
         ]).
 
 get_trace_status(Host, Port) ->
@@ -368,8 +369,11 @@ default_port(https) -> 443;
 default_port(ftp)   -> 21.
 
 printable_date() ->
-    {{Y,Mo,D},{H, M, S}} = calendar:local_time(),
-    {_,_,MicroSecs} = os:timestamp(),
+    printable_date(os:timestamp()).
+
+printable_date(Now) ->
+    {{Y,Mo,D},{H, M, S}} = calendar:now_to_local_time(Now),
+    {_,_,MicroSecs} = Now,
     [integer_to_list(Y),
      $-,
      integer_to_list(Mo),
