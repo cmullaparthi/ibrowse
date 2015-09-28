@@ -41,7 +41,7 @@
 
 -record(state, {host, port, connect_timeout,
                 inactivity_timer_ref,
-                use_proxy = false, proxy_auth_digest,
+                use_proxy = false, proxy_auth_basic,
                 ssl_options = [], is_ssl = false, socket,
                 proxy_tunnel_setup = false,
                 tunnel_setup_queue = [],
@@ -747,10 +747,10 @@ send_req_1(From,
             PHost ->
                 ProxyUser     = get_value(proxy_user, Options, []),
                 ProxyPassword = get_value(proxy_password, Options, []),
-                Digest        = http_auth_digest(ProxyUser, ProxyPassword),
+                AuthBasic        = http_auth_basic(ProxyUser, ProxyPassword),
                 {PHost, get_value(proxy_port, Options, 80),
                  State#state{use_proxy = true,
-                             proxy_auth_digest = Digest}}
+                             proxy_auth_basic = AuthBasic}}
         end,
     State_2 = check_ssl_options(Options, State_1),
     do_trace("Connecting...~n", []),
@@ -981,23 +981,23 @@ add_auth_headers(#url{username = User,
                             undefined ->
                                 Headers;
                             {U,P} ->
-                                [{"Authorization", ["Basic ", http_auth_digest(U, P)]} | Headers]
+                                [{"Authorization", ["Basic ", http_auth_basic(U, P)]} | Headers]
                         end;
                     _ ->
-                        [{"Authorization", ["Basic ", http_auth_digest(User, UPw)]} | Headers]
+                        [{"Authorization", ["Basic ", http_auth_basic(User, UPw)]} | Headers]
                 end,
     add_proxy_auth_headers(State, Headers_1).
 
 add_proxy_auth_headers(#state{use_proxy = false}, Headers) ->
     Headers;
-add_proxy_auth_headers(#state{proxy_auth_digest = []}, Headers) ->
+add_proxy_auth_headers(#state{proxy_auth_basic = []}, Headers) ->
     Headers;
-add_proxy_auth_headers(#state{proxy_auth_digest = Auth_digest}, Headers) ->
-    [{"Proxy-Authorization", ["Basic ", Auth_digest]} | Headers].
+add_proxy_auth_headers(#state{proxy_auth_basic = Auth_basic}, Headers) ->
+    [{"Proxy-Authorization", ["Basic ", Auth_basic]} | Headers].
 
-http_auth_digest([], []) ->
+http_auth_basic([], []) ->
     [];
-http_auth_digest(Username, Password) ->
+http_auth_basic(Username, Password) ->
     ibrowse_lib:encode_base64(Username ++ [$: | Password]).
 
 make_request(Method, Headers, AbsPath, RelPath, Body, Options,
