@@ -36,11 +36,11 @@ start_1(Num_workers, Num_requests, Max_sess) ->
                                                  {one_request_only, 0}
                                                 ]),
         ibrowse:set_max_sessions("localhost", 8081, Max_sess),
-        Start_time    = now(),
+        Start_time    = erlang:timestamp(),
         Workers       = spawn_workers(Num_workers, Num_requests),
         erlang:send_after(1000, self(), print_diagnostics),
         ok            = wait_for_workers(Workers),
-        End_time      = now(),
+        End_time      = erlang:timestamp(),
         Time_in_secs  = trunc(round(timer:now_diff(End_time, Start_time) / 1000000)),
         Req_count     = Num_workers * Num_requests,
         [{_, Success_count}] = ets:lookup(?ibrowse_load_test_counters, success),
@@ -95,7 +95,7 @@ spawn_workers(0, _Num_requests, _Parent, Acc) ->
     lists:reverse(Acc);
 spawn_workers(Num_workers, Num_requests, Parent, Acc) ->
     Pid_ref = spawn_monitor(fun() ->
-                                    random:seed(now()),
+                                    random:seed(erlang:timestamp()),
                                     case catch worker_loop(Parent, Num_requests) of
                                         {'EXIT', Rsn} ->
                                             io:format("Worker crashed with reason: ~p~n", [Rsn]);
@@ -150,11 +150,11 @@ worker_loop(Parent, N) ->
               _ ->
                   "http://localhost:8081/blah"
           end,
-    Start_time = now(),
+    Start_time = erlang:timestamp(),
     Res = ibrowse:send_req(Url, [], get),
-    End_time = now(),
+    End_time = erlang:timestamp(),
     Time_taken = trunc(round(timer:now_diff(End_time, Start_time) / 1000)),
-    ets:insert(ibrowse_load_timings, {now(), Time_taken}),
+    ets:insert(ibrowse_load_timings, {erlang:timestamp(), Time_taken}),
     case Res of
         {ok, "200", _, _} ->
             ets:update_counter(?ibrowse_load_test_counters, success, 1);
