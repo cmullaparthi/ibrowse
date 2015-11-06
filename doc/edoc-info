@@ -1,0 +1,4 @@
+%% encoding: UTF-8
+{application,ibrowse}.
+{modules,[ibrowse,ibrowse_app,ibrowse_http_client,ibrowse_lb,ibrowse_lib,
+          ibrowse_socks5,ibrowse_sup]}.
