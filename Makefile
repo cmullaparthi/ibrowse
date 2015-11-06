@@ -3,20 +3,22 @@ IBROWSE_VSN = $(shell sed -n 's/.*{vsn,.*"\(.*\)"}.*/\1/p' src/ibrowse.app.src)
 DIALYZER_PLT=$(CURDIR)/.dialyzer_plt
 DIALYZER_APPS=erts kernel stdlib ssl crypto public_key
 
+REBAR ?= $(shell which rebar)
+
 all: compile
 
 compile:
-	./rebar compile
+	$(REBAR) compile
 
 clean:
-	./rebar clean
+	$(REBAR) clean
 
 install: compile
 	mkdir -p $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 	cp -r ebin $(DESTDIR)/lib/ibrowse-$(IBROWSE_VSN)/
 
 eunit_test: all
-	./rebar eunit
+	$(REBAR) eunit
 
 test: all
 	cd test; erl -pa ../../ibrowse/ebin -make; cd ../; \
@@ -26,7 +28,7 @@ test: all
 	-s erlang halt
 
 xref: all
-	./rebar xref
+	$(REBAR) xref
 
 docs:
 	erl -noshell \
