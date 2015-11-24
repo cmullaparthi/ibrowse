@@ -1,4 +1,14 @@
 language: erlang
 otp_release:
    - R16B
-script: "make test"
+   - R16B03-1
+   - 17.0
+   - 17.1
+   - 18.0
+   - 18.1
+before_script:
+  - curl -X PUT localhost:5984/couchbeam_testdb
+  - curl -X PUT localhost:5984/couchbeam_testdb2
+  - curl -X PUT localhost:5984/couchbeam_testdb3
+  - "./bootstrap_travis.sh"
+script: "./rebar3 eunit"

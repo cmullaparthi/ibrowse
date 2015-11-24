@@ -1,67 +1,114 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>Module ibrowse_lib</title>
-<link rel="stylesheet" type="text/css" href="stylesheet.css">
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
 </head>
 <body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
 
 <h1>Module ibrowse_lib</h1>
-Module with a few useful functions.
-<ul><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Module with a few useful functions.
+
 
 <h2><a name="description">Description</a></h2>Module with a few useful functions
 <h2><a name="index">Function Index</a></h2>
-<table width="100%" border="1"><tr><td valign="top"><a href="#dec2hex-2">dec2hex/2</a></td><td>dec2hex taken from gtk.erl in std dist
-  M = integer() -- number of hex digits required
-  N = integer() -- the number to represent as hex.</td></tr>
-<tr><td valign="top"><a href="#decode_base64-1">decode_base64/1</a></td><td>Implements the base64 decoding algorithm.</td></tr>
-<tr><td valign="top"><a href="#decode_rfc822_date-1">decode_rfc822_date/1</a></td><td/></tr>
-<tr><td valign="top"><a href="#drv_ue-1">drv_ue/1</a></td><td/></tr>
-<tr><td valign="top"><a href="#drv_ue-2">drv_ue/2</a></td><td/></tr>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#decode_base64-1">decode_base64/1</a></td><td>Implements the base64 decoding algorithm.</td></tr>
+<tr><td valign="top"><a href="#decode_rfc822_date-1">decode_rfc822_date/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_trace-2">do_trace/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_trace-3">do_trace/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_trace-3">do_trace/3</a></td><td></td></tr>
 <tr><td valign="top"><a href="#encode_base64-1">encode_base64/1</a></td><td>Implements the base64 encoding algorithm.</td></tr>
+<tr><td valign="top"><a href="#get_trace_status-2">get_trace_status/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_value-2">get_value/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_value-3">get_value/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#parse_url-1">parse_url/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#printable_date-0">printable_date/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#printable_date-1">printable_date/1</a></td><td></td></tr>
 <tr><td valign="top"><a href="#status_code-1">status_code/1</a></td><td>Given a status code, returns an atom describing the status code.</td></tr>
 <tr><td valign="top"><a href="#url_encode-1">url_encode/1</a></td><td>URL-encodes a string based on RFC 1738.</td></tr>
 </table>
 
 <h2><a name="functions">Function Details</a></h2>
 
-<h3><a name="dec2hex-2">dec2hex/2</a></h3>
-<p><tt>dec2hex(M::integer(), N::integer()) -&gt; string()</tt></p>
-<p>dec2hex taken from gtk.erl in std dist
-  M = integer() -- number of hex digits required
-  N = integer() -- the number to represent as hex</p>
+<h3 class="function"><a name="decode_base64-1">decode_base64/1</a></h3>
+<div class="spec">
+<p><tt>decode_base64(List::In) -&gt; Out | <a href="#type-exit">exit</a>({error, invalid_input})</tt>
+<ul class="definitions"><li><tt>In = string() | binary()</tt></li><li><tt>Out = string() | binary()</tt></li></ul></p>
+</div><p>Implements the base64 decoding algorithm. The output data type matches in the input data type.</p>
 
-<h3><a name="decode_base64-1">decode_base64/1</a></h3>
-<p><tt>decode_base64(List::In) -&gt; Out | <a href="#type-exit">exit({error, invalid_input})</a></tt>
-<ul><li><tt>In = string() | binary()</tt></li><li><tt>Out = string() | binary()</tt></li></ul></p>
-<p>Implements the base64 decoding algorithm. The output data type matches in the input data type.</p>
+<h3 class="function"><a name="decode_rfc822_date-1">decode_rfc822_date/1</a></h3>
+<div class="spec">
+<p><tt>decode_rfc822_date(String) -&gt; any()</tt></p>
+</div>
 
-<h3><a name="decode_rfc822_date-1">decode_rfc822_date/1</a></h3>
-<tt>decode_rfc822_date(String) -&gt; term()
-</tt>
+<h3 class="function"><a name="do_trace-2">do_trace/2</a></h3>
+<div class="spec">
+<p><tt>do_trace(Fmt, Args) -&gt; any()</tt></p>
+</div>
 
-<h3><a name="drv_ue-1">drv_ue/1</a></h3>
-<tt>drv_ue(Str) -&gt; term()
-</tt>
+<h3 class="function"><a name="do_trace-3">do_trace/3</a></h3>
+<div class="spec">
+<p><tt>do_trace(X1, Fmt, Args) -&gt; any()</tt></p>
+</div>
 
-<h3><a name="drv_ue-2">drv_ue/2</a></h3>
-<tt>drv_ue(Str, Port) -&gt; term()
-</tt>
+<h3 class="function"><a name="do_trace-3">do_trace/3</a></h3>
+<div class="spec">
+<p><tt>do_trace(X1, Fmt, Args) -&gt; any()</tt></p>
+</div>
 
-<h3><a name="encode_base64-1">encode_base64/1</a></h3>
+<h3 class="function"><a name="encode_base64-1">encode_base64/1</a></h3>
+<div class="spec">
 <p><tt>encode_base64(List::In) -&gt; Out</tt>
-<ul><li><tt>In = string() | binary()</tt></li><li><tt>Out = string() | binary()</tt></li></ul></p>
-<p>Implements the base64 encoding algorithm. The output data type matches in the input data type.</p>
+<ul class="definitions"><li><tt>In = string() | binary()</tt></li><li><tt>Out = string() | binary()</tt></li></ul></p>
+</div><p>Implements the base64 encoding algorithm. The output data type matches in the input data type.</p>
 
-<h3><a name="status_code-1">status_code/1</a></h3>
+<h3 class="function"><a name="get_trace_status-2">get_trace_status/2</a></h3>
+<div class="spec">
+<p><tt>get_trace_status(Host, Port) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="get_value-2">get_value/2</a></h3>
+<div class="spec">
+<p><tt>get_value(Tag, TVL) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="get_value-3">get_value/3</a></h3>
+<div class="spec">
+<p><tt>get_value(Tag, TVL, DefVal) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="parse_url-1">parse_url/1</a></h3>
+<div class="spec">
+<p><tt>parse_url(Url) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="printable_date-0">printable_date/0</a></h3>
+<div class="spec">
+<p><tt>printable_date() -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="printable_date-1">printable_date/1</a></h3>
+<div class="spec">
+<p><tt>printable_date(Now) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="status_code-1">status_code/1</a></h3>
+<div class="spec">
 <p><tt>status_code(StatusCode::<a href="#type-status_code">status_code()</a>) -&gt; StatusDescription</tt>
-<ul><li><tt><a name="type-status_code">status_code()</a> = string() | integer()</tt></li><li><tt>StatusDescription = atom()</tt></li></ul></p>
-<p>Given a status code, returns an atom describing the status code.</p>
+<ul class="definitions"><li><tt><a name="type-status_code">status_code()</a> = string() | integer()</tt></li><li><tt>StatusDescription = atom()</tt></li></ul></p>
+</div><p>Given a status code, returns an atom describing the status code.</p>
 
-<h3><a name="url_encode-1">url_encode/1</a></h3>
+<h3 class="function"><a name="url_encode-1">url_encode/1</a></h3>
+<div class="spec">
 <p><tt>url_encode(Str) -&gt; UrlEncodedStr</tt>
-<ul><li><tt>Str = string()</tt></li><li><tt>UrlEncodedStr = string()</tt></li></ul></p>
-<p>URL-encodes a string based on RFC 1738. Returns a flat list.</p>
+<ul class="definitions"><li><tt>Str = string()</tt></li><li><tt>UrlEncodedStr = string()</tt></li></ul></p>
+</div><p>URL-encodes a string based on RFC 1738. Returns a flat list.</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Nov 6 2015, 11:40:24.</i></p>
 </body>
 </html>
