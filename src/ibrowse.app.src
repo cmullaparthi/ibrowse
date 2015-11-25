@@ -7,6 +7,6 @@
 	 {mod, {ibrowse_app, []}},
          {maintainers, ["Chandrashekhar Mullaparthi"]},
          {licenses, ["GPLv2", "BSD"]},
-         {links, ["https://github.com/cmullaparthi/ibrowse"]}
+         {links, [{"Github", "https://github.com/cmullaparthi/ibrowse"}]}
         ]
 }.
