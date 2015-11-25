@@ -1,5 +1,9 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
+25-11-2015 - v4.2.1
+             * Merged pull request https://github.com/cmullaparthi/ibrowse/pull/132
+             * Merged pull request https://github.com/cmullaparthi/ibrowse/pull/137
+
 28-09-2015 - v4.2
              * Merged long pending improvements to pipelining
                https://github.com/cmullaparthi/ibrowse/pull/123
