@@ -13,7 +13,22 @@ compile:
 clean:
 	$(REBAR) clean
 
-test:
+test: unit_tests old_tests eunit
+	@echo "====================================================="
+
+unit_tests:
+	@echo "====================================================="
+	@echo "Running tests..."
+	@cd test && make test && cd ..
+
+old_tests:
+	@echo "====================================================="
+	@echo "Running old tests..."
+	@cd test && make old_tests && cd ..
+
+eunit:
+	@echo "====================================================="
+	@echo "Running eunit tests..."
 	$(REBAR) eunit
 
 xref: all

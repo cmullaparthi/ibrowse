@@ -539,9 +539,9 @@ handle_sock_closed(#state{reply_buffer = Buf, reqs = Reqs, http_status_code = SC
                         true ->
                             {ok, Status_line, Raw_headers, Body, Raw_req};
                         false when Give_raw_req == false ->
-                            {ok, SC, Headers, Buf};
+                            {ok, SC, Headers, Body};
                         false ->
-                            {ok, SC, Headers, Buf, Raw_req}
+                            {ok, SC, Headers, Body, Raw_req}
                     end,
             State_1 = do_reply(State, From, StreamTo, ReqId, Resp_format, Reply),
             case Retry_state of
@@ -1257,7 +1257,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                 undefined when HttpVsn =:= "HTTP/1.0";
                                ConnClose =:= "close" ->
                     send_async_headers(ReqId, StreamTo, Give_raw_headers, State_1),
-                    State_1#state{reply_buffer = Data_1};
+                    accumulate_response(Data_1, State_1);
                 undefined when StatCode =:= "303" ->
                     %% Some servers send 303 requests without a body.
                     %% RFC2616 says that they SHOULD, but they dont.

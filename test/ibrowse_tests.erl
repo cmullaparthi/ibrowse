@@ -1,11 +1,11 @@
-%%% File    : ibrowse_functional_tests.erl
+%%% File    : ibrowse_tests.erl
 %%% Authors : Benjamin Lee <http://github.com/benjaminplee>
 %%%           Dan Schwabe <http://github.com/dfschwabe>
 %%%           Brian Richards <http://github.com/richbria>
 %%% Description : Functional tests of the ibrowse library using a live test HTTP server
 %%% Created : 18 November 2014 by Benjamin Lee <yardspoon@gmail.com>
 
--module(ibrowse_functional_tests).
+-module(ibrowse_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 -define(PER_TEST_TIMEOUT_SEC, 60).

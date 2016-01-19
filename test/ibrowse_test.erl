@@ -37,7 +37,8 @@
          test_binary_headers/1,
          test_generate_body_0/0,
          test_retry_of_requests/0,
-         test_retry_of_requests/1
+         test_retry_of_requests/1,
+	 test_save_to_file_no_content_length/0
 	]).
 
 -include_lib("ibrowse/include/ibrowse.hrl").
@@ -220,8 +221,13 @@ dump_errors(Key, Iod) ->
                       {local_test_fun, test_head_transfer_encoding, []},
                       {local_test_fun, test_head_response_with_body, []},
                       {local_test_fun, test_303_response_with_a_body, []},
+		      {local_test_fun, test_303_response_with_no_body, []},
                       {local_test_fun, test_binary_headers, []},
-                      {local_test_fun, test_retry_of_requests, []}
+                      {local_test_fun, test_retry_of_requests, []},
+		      {local_test_fun, test_save_to_file_no_content_length, []},
+		      {local_test_fun, verify_chunked_streaming, []},
+		      {local_test_fun, test_chunked_streaming_once, []},
+		      {local_test_fun, test_generate_body_0, []}
                      ]).
 
 -define(TEST_LIST, [{"http://intranet/messenger", get},
@@ -254,17 +260,16 @@ dump_errors(Key, Iod) ->
 		    {"http://jigsaw.w3.org/HTTP/CL/", get},
 		    {"http://www.httpwatch.com/httpgallery/chunked/", get},
                     {"https://github.com", get, [{ssl_options, [{depth, 2}]}]}
-		   ] ++ ?LOCAL_TESTS).
+		   ]).
 
 local_unit_tests() ->
     unit_tests([], ?LOCAL_TESTS).
 
 unit_tests() ->
-    error_logger:tty(false),
-    unit_tests([], ?TEST_LIST),
-    error_logger:tty(true).
+    unit_tests([], ?TEST_LIST).
 
 unit_tests(Options, Test_list) ->
+    error_logger:tty(false),
     application:start(crypto),
     application:start(asn1),
     application:start(public_key),
@@ -284,6 +289,7 @@ unit_tests(Options, Test_list) ->
 	    io:format("Timed out waiting for tests to complete~n", [])
     end,
     catch ibrowse_test_server:stop_server(8181),
+    error_logger:tty(true),
     ok.
 
 unit_tests_1(Parent, Options, Test_list) ->
@@ -320,7 +326,8 @@ verify_chunked_streaming(Options) ->
     Res2 = compare_responses(Result_without_streaming, Async_response_list, Async_response_bin_once),
     case {Res1, Res2} of
         {success, success} ->
-            io:format("  Chunked streaming working~n", []);
+            io:format("  Chunked streaming working~n", []),
+	    success;
         _ ->
             ok
     end.
@@ -335,7 +342,7 @@ test_chunked_streaming_once(Options) ->
     io:format("  Fetching data with streaming as binary, {active, once}...~n", []),
     case do_async_req_list(Url, get, [once, {response_format, binary} | Options]) of
         {ok, _, _, _} ->
-            io:format("  Success!~n", []);
+            success;
         Err ->
             io:format("  Fail: ~p~n", [Err])
     end.
@@ -445,8 +452,8 @@ maybe_stream_next(Req_id, Options) ->
 
 execute_req(local_test_fun, Method, Args) ->
     reset_ibrowse(),
-    io:format("     ~-54.54w: ", [Method]),
     Result = (catch apply(?MODULE, Method, Args)),
+    io:format("     ~-54.54w: ", [Method]),
     io:format("~p~n", [Result]);
 execute_req(Url, Method, Options) ->
     io:format("~7.7w, ~50.50s: ", [Method, Url]),
@@ -556,6 +563,29 @@ test_303_response_with_a_body(Url) ->
             success;
         Res ->
             {test_failed, Res}
+    end.
+
+%%------------------------------------------------------------------------------
+%% Test that when the save_response_to_file option is used with a server which
+%% does not send the Content-Length header, the response is saved correctly to
+%% a file
+%%------------------------------------------------------------------------------
+test_save_to_file_no_content_length() ->
+    clear_msg_q(),
+    {{Y, M, D}, {H, Mi, S}} = calendar:local_time(),
+    Test_file = filename:join
+		  ([".", 
+		    lists:flatten(
+		      io_lib:format("test_save_to_file_no_content_length_~p~p~p_~p~p~p.txt", [Y, M, D, H, Mi, S]))]),
+    try
+	case ibrowse:send_req("http://localhost:8181/ibrowse_send_file_conn_close", [], get, [], [{save_response_to_file, Test_file}]) of
+	    {ok, "200", _, {file, Test_file}} ->
+		success;
+	    Res ->
+		{test_failed, Res}
+	end
+    after
+	file:delete(Test_file)
     end.
 
 %%------------------------------------------------------------------------------
@@ -775,11 +805,10 @@ do_test_20122010_1(Expected_resp, Req_id, Acc) ->
 %% Test requests where body is generated using a Fun
 %%------------------------------------------------------------------------------
 test_generate_body_0() ->
-    io:format("Testing that generation of body using fun works...~n", []),
     Tid = ets:new(ibrowse_test_state, [public]),
     try
         Body_1 = <<"Part 1 of the body">>,
-        Body_2 = <<"Part 2 of the body\r\n\r\n">>,
+        Body_2 = <<"Part 2 of the body\r\n">>,
         Size = size(Body_1) + size(Body_2),
         Body = list_to_binary([Body_1, Body_2]),
         Fun = fun() ->
@@ -799,9 +828,8 @@ test_generate_body_0() ->
                               post,
                               Fun,
                               [{response_format, binary},
-                               {http_vsn, {1,0}}]) of
+                               {http_vsn, {1,1}}]) of
             {ok, "200", _, Body} ->
-                io:format("    Success~n", []),
                 success;
             Err ->
                 io:format("Test failed : ~p~n", [Err]),

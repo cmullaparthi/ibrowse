@@ -10,10 +10,10 @@
          get_conn_pipeline_depth/0
         ]).
 
--record(request, {method, uri, version, headers = [], body = []}).
+-record(request, {method, uri, version, headers = [], body = [], state}).
 
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
--define(ACCEPT_TIMEOUT_MS, 1000).
+-define(ACCEPT_TIMEOUT_MS, 10000).
 -define(CONN_PIPELINE_DEPTH, conn_pipeline_depth).
 
 start_server(Port, Sock_type) ->
@@ -45,7 +45,7 @@ start_server(Port, Sock_type) ->
     spawn_link(Fun).
 
 stop_server(Port) ->
-    server_proc_name(Port) ! stop,
+    catch server_proc_name(Port) ! stop,
     timer:sleep(2000),  % wait for server to receive msg and unregister
     ok.
 
@@ -72,7 +72,6 @@ accept_loop(Sock, Sock_type) ->
         {ok, Conn} ->
             Pid = spawn_link(fun() -> connection(Conn, Sock_type) end),
             set_controlling_process(Conn, Sock_type, Pid),
-            Pid ! {setopts, [{active, true}]},
             accept_loop(Sock, Sock_type);
         {error, timeout} ->
             receive
@@ -88,6 +87,7 @@ accept_loop(Sock, Sock_type) ->
 connection(Conn, Sock_type) ->
     catch ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
     try
+	inet:setopts(Conn, [{packet, http}, {active, true}]),
         server_loop(Conn, Sock_type, #request{})
     after
         catch ets:delete(?CONN_PIPELINE_DEPTH, self())
@@ -118,10 +118,22 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
                     gen_tcp:shutdown(Sock, read_write);
                 not_done ->
                     ok;
+		collect_body ->
+		    server_loop(Sock, Sock_type, Req#request{state = collect_body});
                 _ ->
                     catch ets:update_counter(?CONN_PIPELINE_DEPTH, self(), -1)
             end,
             server_loop(Sock, Sock_type, #request{});
+        {http, Sock, {http_error, Packet}} when Req#request.state == collect_body ->
+	    Req_1 = Req#request{body = list_to_binary([Packet, Req#request.body])},
+	    case process_request(Sock, Sock_type, Req_1) of
+		close_connection ->
+                    gen_tcp:shutdown(Sock, read_write);
+                ok ->
+                    server_loop(Sock, Sock_type, #request{});
+		collect_body ->
+		    server_loop(Sock, Sock_type, Req_1)
+	    end;	    
         {http, Sock, {http_error, Err}} ->
             io:format("Error parsing HTTP request:~n"
                       "Req so far : ~p~n"
@@ -186,6 +198,19 @@ process_request(Sock, Sock_type,
     Resp = <<"HTTP/1.1 400 Bad Request\r\nServer: Apache-Coyote/1.1\r\nContent-Length:5\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type,
+                #request{method='POST',
+                         headers = Headers,
+                         uri = {abs_path, "/echo_body"},
+			body = Body}) ->
+    Content_len = get_content_length(Headers),
+    case iolist_size(Body) == Content_len of
+	true ->
+	    Resp = [<<"HTTP/1.1 200 OK\r\nContent-Length: ">>, integer_to_list(Content_len), <<"\r\nServer: ibrowse_test_server\r\n\r\n">>, Body],
+	    do_send(Sock, Sock_type, list_to_binary(Resp));
+	false ->
+	    collect_body
+    end;
+process_request(Sock, Sock_type,
                 #request{method='GET',
                          headers = Headers,
                          uri = {abs_path, "/ibrowse_echo_header"}}) ->
@@ -213,7 +238,7 @@ process_request(Sock, Sock_type,
                 #request{method='POST',
                          headers = _Headers,
                          uri = {abs_path, "/ibrowse_303_no_body_test"}}) ->
-    Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\n">>,
+    Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type,
                 #request{method='POST',
@@ -235,6 +260,15 @@ process_request(Sock, Sock_type,
         uri = {abs_path, "/ibrowse_handle_one_request_only"}}) ->
     Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\n">>,
     do_send(Sock, Sock_type, Resp),
+    close_connection;
+process_request(Sock, Sock_type,
+    #request{method='GET',
+        headers = _Headers,
+        uri = {abs_path, "/ibrowse_send_file_conn_close"}}) ->
+    Resp = <<"HTTP/1.1 200 OK\r\nServer: Apache-Coyote/1.1\r\nDate: Wed, 04 Apr 2012 16:53:49 GMT\r\nConnection: close\r\n\r\nblahblah-">>,    
+    do_send(Sock, Sock_type, Resp),
+    timer:sleep(1000),
+    do_send(Sock, Sock_type, <<"blahblah">>),
     close_connection;
 process_request(_Sock, _Sock_type, #request{uri = {abs_path, "/never_respond"} } ) ->
     not_done;
@@ -300,3 +334,10 @@ to_lower(X) when is_atom(X) ->
     list_to_atom(to_lower(atom_to_list(X)));
 to_lower(X) when is_list(X) ->
     string:to_lower(X).
+
+get_content_length([{http_header, _, 'Content-Length', _, V} | _]) ->
+    list_to_integer(V);
+get_content_length([{http_header, _, _X, _, _Y} | T]) ->
+    get_content_length(T);
+get_content_length([]) ->
+    undefined.
