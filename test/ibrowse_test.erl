@@ -12,8 +12,6 @@
 	 unit_tests/0,
          unit_tests/2,
          unit_tests_1/3,
-	 ue_test_/0,
-	 ue_test_/1,
 	 verify_chunked_streaming/0,
 	 verify_chunked_streaming/1,
          test_chunked_streaming_once/0,
@@ -502,15 +500,6 @@ execute_req(Url, Method, Options) ->
 	Err ->
 	    io:format("~p~n", [Err])
     end.
-
-ue_test_() ->
-    ue_test_(lists:duplicate(1024, $?)).
-ue_test_(Data) ->
-    {Time, Res} = timer:tc(ibrowse_lib, url_encode, [Data]),
-    io:format("Time -> ~p~n", [Time]),
-    io:format("Data Length -> ~p~n", [length(Data)]),
-    io:format("Res Length -> ~p~n", [length(Res)]).
-%    io:format("Result -> ~s~n", [Res]).
 
 log_msg(Fmt, Args) ->
     io:format("~s -- " ++ Fmt,
