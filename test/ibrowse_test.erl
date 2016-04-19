@@ -5,15 +5,15 @@
 
 -module(ibrowse_test).
 -export([
-	 load_test/3,
+	 load_test_/3,
 	 send_reqs_1/3,
 	 do_send_req/2,
          local_unit_tests/0,
 	 unit_tests/0,
          unit_tests/2,
          unit_tests_1/3,
-	 ue_test/0,
-	 ue_test/1,
+	 ue_test_/0,
+	 ue_test_/1,
 	 verify_chunked_streaming/0,
 	 verify_chunked_streaming/1,
          test_chunked_streaming_once/0,
@@ -40,9 +40,9 @@
          test_retry_of_requests/0,
          test_retry_of_requests/1,
 	 test_save_to_file_no_content_length/0,
-         socks5_noauth_test/0,
-         socks5_auth_succ_test/0,
-         socks5_auth_fail_test/0
+         socks5_noauth/0,
+         socks5_auth_succ/0,
+         socks5_auth_fail/0
 	]).
 
 -include_lib("ibrowse/include/ibrowse.hrl").
@@ -51,9 +51,9 @@
 %% Unit Tests
 %%------------------------------------------------------------------------------
 -define(LOCAL_TESTS, [
-                      {local_test_fun, socks5_noauth_test, []},
-                      {local_test_fun, socks5_auth_succ_test, []},
-                      {local_test_fun, socks5_auth_fail_test, []},
+                      {local_test_fun, socks5_noauth, []},
+                      {local_test_fun, socks5_auth_succ, []},
+                      {local_test_fun, socks5_auth_fail, []},
                       {local_test_fun, test_preserve_status_line, []},
 		      {local_test_fun, test_save_to_file_no_content_length, []},
                       {local_test_fun, test_20122010, []},
@@ -101,7 +101,7 @@
                     {"https://github.com", get, [{ssl_options, [{depth, 2}]}]}
 		   ]).
 
-socks5_noauth_test() ->
+socks5_noauth() ->
     case ibrowse:send_req("http://localhost:8181/success", [], get, [],
                           [{socks5_host, "localhost"}, {socks5_port, 8282}], 2000) of
 	{ok, "200", _, _} ->
@@ -110,7 +110,7 @@ socks5_noauth_test() ->
 	    Err
     end.
 
-socks5_auth_succ_test() ->
+socks5_auth_succ() ->
     case ibrowse:send_req("http://localhost:8181/success", [], get, [],
                           [{socks5_host, "localhost"}, {socks5_port, 8383},
                            {socks5_user, <<"user">>}, {socks5_password, <<"password">>}], 2000) of
@@ -120,7 +120,7 @@ socks5_auth_succ_test() ->
 	    Err
     end.
 
-socks5_auth_fail_test() ->
+socks5_auth_fail() ->
     case ibrowse:send_req("http://localhost:8181/success", [], get, [],
                           [{socks5_host, "localhost"}, {socks5_port, 8282},
                            {socks5_user, <<"user">>}, {socks5_password, <<"wrong_password">>}], 2000) of
@@ -169,9 +169,10 @@ test_stream_once(Req_id) ->
 	{ibrowse_async_response_end, Req_id} ->
 	    ok
     end.
+
 %% Use ibrowse:set_max_sessions/3 and ibrowse:set_max_pipeline_size/3 to
 %% tweak settings before running the load test. The defaults are 10 and 10.
-load_test(Url, NumWorkers, NumReqsPerWorker) when is_list(Url),
+load_test_(Url, NumWorkers, NumReqsPerWorker) when is_list(Url),
                                                   is_integer(NumWorkers),
                                                   is_integer(NumReqsPerWorker),
                                                   NumWorkers > 0,
@@ -502,9 +503,9 @@ execute_req(Url, Method, Options) ->
 	    io:format("~p~n", [Err])
     end.
 
-ue_test() ->
-    ue_test(lists:duplicate(1024, $?)).
-ue_test(Data) ->
+ue_test_() ->
+    ue_test_(lists:duplicate(1024, $?)).
+ue_test_(Data) ->
     {Time, Res} = timer:tc(ibrowse_lib, url_encode, [Data]),
     io:format("Time -> ~p~n", [Time]),
     io:format("Data Length -> ~p~n", [length(Data)]),

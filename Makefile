@@ -29,7 +29,7 @@ old_tests:
 eunit:
 	@echo "====================================================="
 	@echo "Running eunit tests..."
-	$(REBAR) eunit --dir="src" 
+	$(REBAR) eunit
 
 xref: all
 	$(REBAR) xref
