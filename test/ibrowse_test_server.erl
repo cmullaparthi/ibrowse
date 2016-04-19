@@ -5,6 +5,7 @@
 
 -module(ibrowse_test_server).
 -export([
+         start_server/0,
          start_server/2,
          stop_server/1,
          get_conn_pipeline_depth/0
@@ -15,6 +16,9 @@
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
 -define(ACCEPT_TIMEOUT_MS, 10000).
 -define(CONN_PIPELINE_DEPTH, conn_pipeline_depth).
+
+start_server() ->
+    start_server(8181, tcp).
 
 start_server(Port, Sock_type) ->
     Fun = fun() ->
@@ -42,10 +46,14 @@ start_server(Port, Sock_type) ->
 			  ok
 		  end
 	  end,
-    spawn_link(Fun).
+    spawn_link(Fun),
+    ibrowse_socks_server:start(8282, 0), %% No auth
+    ibrowse_socks_server:start(8383, 2). %% Username/Password auth
 
 stop_server(Port) ->
     catch server_proc_name(Port) ! stop,
+    ibrowse_socks_server:stop(8282),
+    ibrowse_socks_server:stop(8383),
     timer:sleep(2000),  % wait for server to receive msg and unregister
     ok.
 
@@ -245,6 +253,12 @@ process_request(Sock, Sock_type,
                          headers = _Headers,
                          uri = {abs_path, "/ibrowse_303_with_body_test"}}) ->
     Resp = <<"HTTP/1.1 303 See Other\r\nLocation: http://example.org\r\nContent-Length: 5\r\n\r\nabcde">>,
+    do_send(Sock, Sock_type, Resp);
+process_request(Sock, Sock_type,
+                #request{method='GET',
+                         headers = _Headers,
+                         uri = {abs_path, "/ibrowse_preserve_status_line"}}) ->
+    Resp = <<"HTTP/1.1 200 OKBlah\r\nContent-Length: 5\r\n\r\nabcde">>,
     do_send(Sock, Sock_type, Resp);
 process_request(Sock, Sock_type,
     #request{method='GET',

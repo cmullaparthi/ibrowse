@@ -1,13 +1,17 @@
 REBAR ?= $(shell which rebar3)
-
-test: compile
-	@erl -noshell -boot start_clean -pa ../../ibrowse/ebin -s ibrowse_test local_unit_tests -s erlang halt
-
-old_tests: compile
-	@erl -noshell -boot start_clean -pa ../../ibrowse/ebin -s ibrowse_test unit_tests -s erlang halt
+IBROWSE_EBIN_PATH=../_build/default/lib/ibrowse/ebin
 
 compile:
-	@erl -pa ../../ibrowse/ebin -make
+	@erl -pa $(IBROWSE_EBIN_PATH) -make
+
+test: compile
+	@erl -noshell -boot start_clean -pa $(IBROWSE_EBIN_PATH) -s ibrowse_test local_unit_tests -s erlang halt
+
+old_tests: compile
+	@erl -noshell -boot start_clean -pa $(IBROWSE_EBIN_PATH) -s ibrowse_test unit_tests -s erlang halt
+
+test_shell: compile
+	erl -boot start_clean -pa $(IBROWSE_EBIN_PATH) -s ibrowse_test_server start_server
 
 clean:
-	$(REBAR) clean
+	@rm -f *.beam

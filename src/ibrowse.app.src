@@ -1,6 +1,6 @@
 {application, ibrowse,
         [{description, "Erlang HTTP client application"},
-         {vsn, "4.2.2"},
+         {vsn, "4.2.3"},
          {registered, [ibrowse_sup, ibrowse]},
          {applications, [kernel,stdlib]},
 	 {env, []},

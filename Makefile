@@ -11,9 +11,9 @@ compile:
 	$(REBAR) compile
 
 clean:
-	$(REBAR) clean
+	@$(REBAR) clean && cd test && make clean && cd ..
 
-test: unit_tests old_tests eunit
+test: compile unit_tests eunit
 	@echo "====================================================="
 
 unit_tests:

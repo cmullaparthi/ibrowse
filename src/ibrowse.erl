@@ -300,8 +300,23 @@ send_req(Url, Headers, Method, Body) ->
 %%          {workaround, head_response_with_body}     |
 %%          {worker_process_options, list()} |
 %%          {return_raw_request, true}         |
-%%          {max_attempts, integer()}
+%%          {max_attempts, integer()}          |
+%%          {socks5_host, host()}              |
+%%          {socks5_port, integer()}           |
+%%          {socks5_user, binary()}            |
+%%          {socks5_password, binary()}
 %%
+%% ip4_address() = {0..255, 0..255, 0..255, 0..255}
+%% ip6_address() = 
+%%     {0..65535,
+%%      0..65535,
+%%      0..65535,
+%%      0..65535,
+%%      0..65535,
+%%      0..65535,
+%%      0..65535,
+%%      0..65535}
+%% host() = string() | ip4_address() | ip6_address()
 %% stream_to() = process() | {process(), once}
 %% process() = pid() | atom()
 %% username() = string()

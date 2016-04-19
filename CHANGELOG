@@ -1,6 +1,12 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
 
+19-04-2016 - v4.2.3
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/143
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/142
+             * Fix for https://github.com/cmullaparthi/ibrowse/issues/139
+             * Fixed behaviour of option preserve_status_line
+
 25-11-2015 - v4.2.2
              * Fix to ibrowse.app.src to enable publishing using Hex
 

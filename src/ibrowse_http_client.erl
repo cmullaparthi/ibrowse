@@ -1174,6 +1174,7 @@ parse_response(Data, #state{reply_buffer = Acc, reqs = Reqs,
                                             http_status_code=StatCode};
                           false ->
                               State_0#state{recvd_headers=Headers_1, status=get_body,
+                                            status_line = Status_line,
                                             reply_buffer = <<>>,
                                             http_status_code=StatCode}
                       end,

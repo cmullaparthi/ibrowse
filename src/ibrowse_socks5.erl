@@ -53,18 +53,29 @@ connect(Host, Port, Options, SockOptions, Timeout) ->
     end.
 
 handshake(Socket, Options) when is_port(Socket) ->
-    {Handshake, Success} = case get_value(socks5_user, Options, <<>>) of
-        <<>> ->
-            {<<?VERSION, 1, ?NO_AUTH>>, ?NO_AUTH};
-        User ->
-            Password = get_value(socks5_password, Options, <<>>),
-            {<<?VERSION, 1, ?USERPASS, (byte_size(User)), User,
-               (byte_size(Password)), Password>>, ?USERPASS}
-    end,
-    ok = gen_tcp:send(Socket, Handshake),
-    case gen_tcp:recv(Socket, 0) of
-        {ok, <<?VERSION, Success>>} ->
+    User = get_value(socks5_user, Options, <<>>),
+    Handshake_msg = case User of
+                        <<>> ->
+                            <<?VERSION, 1, ?NO_AUTH>>;
+                        User ->
+                            <<?VERSION, 1, ?USERPASS>>
+                    end,
+    ok = gen_tcp:send(Socket, Handshake_msg),
+    case gen_tcp:recv(Socket, 2) of
+        {ok, <<?VERSION, ?NO_AUTH>>} ->
             ok;
+        {ok, <<?VERSION, ?USERPASS>>} ->
+            Password = get_value(socks5_password, Options, <<>>),
+            Auth_msg = list_to_binary([1, 
+                                       iolist_size(User), User,
+                                       iolist_size(Password), Password]),
+            ok = gen_tcp:send(Socket, Auth_msg),
+            case gen_tcp:recv(Socket, 2) of
+                {ok, <<1, ?SUCCEEDED>>} ->
+                    ok;
+                _ ->
+                    {error, unacceptable}
+            end;
         {ok, <<?VERSION, ?UNACCEPTABLE>>} ->
             {error, unacceptable};
         {error, Reason} ->
@@ -76,18 +87,18 @@ connect(Host, Port, Via) when is_list(Host) ->
 connect(Host, Port, Via) when is_binary(Host), is_integer(Port),
                               is_port(Via) ->
     {AddressType, Address} = case inet:parse_address(binary_to_list(Host)) of
-        {ok, {IP1, IP2, IP3, IP4}} ->
-            {?ATYP_IPV4, <<IP1,IP2,IP3,IP4>>};
-        {ok, {IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}} ->
-            {?ATYP_IPV6, <<IP1,IP2,IP3,IP4,IP5,IP6,IP7,IP8>>};
-        _ ->
-            HostLength = byte_size(Host),
-            {?ATYP_DOMAINNAME, <<HostLength,Host/binary>>}
-    end,
+                                 {ok, {IP1, IP2, IP3, IP4}} ->
+                                     {?ATYP_IPV4, <<IP1,IP2,IP3,IP4>>};
+                                 {ok, {IP1, IP2, IP3, IP4, IP5, IP6, IP7, IP8}} ->
+                                     {?ATYP_IPV6, <<IP1,IP2,IP3,IP4,IP5,IP6,IP7,IP8>>};
+                                 _ ->
+                                     HostLength = byte_size(Host),
+                                     {?ATYP_DOMAINNAME, <<HostLength,Host/binary>>}
+                             end,
     ok = gen_tcp:send(Via,
-        <<?VERSION, ?CONNECT, ?RESERVED,
-          AddressType, Address/binary,
-          (Port):16>>),
+                      <<?VERSION, ?CONNECT, ?RESERVED,
+                        AddressType, Address/binary,
+                        (Port):16>>),
     case gen_tcp:recv(Via, 0) of
         {ok, <<?VERSION, ?SUCCEEDED, ?RESERVED, _/binary>>} ->
             ok;

@@ -33,15 +33,102 @@
          test_303_response_with_no_body/1,
          test_303_response_with_a_body/0,
          test_303_response_with_a_body/1,
+         test_preserve_status_line/0,
          test_binary_headers/0,
          test_binary_headers/1,
          test_generate_body_0/0,
          test_retry_of_requests/0,
          test_retry_of_requests/1,
-	 test_save_to_file_no_content_length/0
+	 test_save_to_file_no_content_length/0,
+         socks5_noauth_test/0,
+         socks5_auth_succ_test/0,
+         socks5_auth_fail_test/0
 	]).
 
 -include_lib("ibrowse/include/ibrowse.hrl").
+
+%%------------------------------------------------------------------------------
+%% Unit Tests
+%%------------------------------------------------------------------------------
+-define(LOCAL_TESTS, [
+                      {local_test_fun, socks5_noauth_test, []},
+                      {local_test_fun, socks5_auth_succ_test, []},
+                      {local_test_fun, socks5_auth_fail_test, []},
+                      {local_test_fun, test_preserve_status_line, []},
+		      {local_test_fun, test_save_to_file_no_content_length, []},
+                      {local_test_fun, test_20122010, []},
+                      {local_test_fun, test_pipeline_head_timeout, []},
+                      {local_test_fun, test_head_transfer_encoding, []},
+                      {local_test_fun, test_head_response_with_body, []},
+                      {local_test_fun, test_303_response_with_a_body, []},
+		      {local_test_fun, test_303_response_with_no_body, []},
+                      {local_test_fun, test_binary_headers, []},
+                      {local_test_fun, test_retry_of_requests, []},
+		      {local_test_fun, verify_chunked_streaming, []},
+		      {local_test_fun, test_chunked_streaming_once, []},
+		      {local_test_fun, test_generate_body_0, []}
+                     ]).
+
+-define(TEST_LIST, [{"http://intranet/messenger", get},
+		    {"http://www.google.co.uk", get},
+		    {"http://www.google.com", get},
+		    {"http://www.google.com", options},
+                    {"https://mail.google.com", get},
+		    {"http://www.sun.com", get},
+		    {"http://www.oracle.com", get},
+		    {"http://www.bbc.co.uk", get},
+		    {"http://www.bbc.co.uk", trace},
+		    {"http://www.bbc.co.uk", options},
+		    {"http://yaws.hyber.org", get},
+		    {"http://jigsaw.w3.org/HTTP/ChunkedScript", get},
+		    {"http://jigsaw.w3.org/HTTP/TE/foo.txt", get},
+		    {"http://jigsaw.w3.org/HTTP/TE/bar.txt", get},
+		    {"http://jigsaw.w3.org/HTTP/connection.html", get},
+		    {"http://jigsaw.w3.org/HTTP/cc.html", get},
+		    {"http://jigsaw.w3.org/HTTP/cc-private.html", get},
+		    {"http://jigsaw.w3.org/HTTP/cc-proxy-revalidate.html", get},
+		    {"http://jigsaw.w3.org/HTTP/cc-nocache.html", get},
+		    {"http://jigsaw.w3.org/HTTP/h-content-md5.html", get},
+		    {"http://jigsaw.w3.org/HTTP/h-retry-after.html", get},
+		    {"http://jigsaw.w3.org/HTTP/h-retry-after-date.html", get},
+		    {"http://jigsaw.w3.org/HTTP/neg", get},
+		    {"http://jigsaw.w3.org/HTTP/negbad", get},
+		    {"http://jigsaw.w3.org/HTTP/400/toolong/", get},
+		    {"http://jigsaw.w3.org/HTTP/300/", get},
+		    {"http://jigsaw.w3.org/HTTP/Basic/", get, [{basic_auth, {"guest", "guest"}}]},
+		    {"http://jigsaw.w3.org/HTTP/CL/", get},
+		    {"http://www.httpwatch.com/httpgallery/chunked/", get},
+                    {"https://github.com", get, [{ssl_options, [{depth, 2}]}]}
+		   ]).
+
+socks5_noauth_test() ->
+    case ibrowse:send_req("http://localhost:8181/success", [], get, [],
+                          [{socks5_host, "localhost"}, {socks5_port, 8282}], 2000) of
+	{ok, "200", _, _} ->
+            success;
+	Err ->
+	    Err
+    end.
+
+socks5_auth_succ_test() ->
+    case ibrowse:send_req("http://localhost:8181/success", [], get, [],
+                          [{socks5_host, "localhost"}, {socks5_port, 8383},
+                           {socks5_user, <<"user">>}, {socks5_password, <<"password">>}], 2000) of
+	{ok, "200", _, _} ->
+            success;
+	Err ->
+	    Err
+    end.
+
+socks5_auth_fail_test() ->
+    case ibrowse:send_req("http://localhost:8181/success", [], get, [],
+                          [{socks5_host, "localhost"}, {socks5_port, 8282},
+                           {socks5_user, <<"user">>}, {socks5_password, <<"wrong_password">>}], 2000) of
+        {error,{conn_failed,{error,unacceptable}}} ->
+            success;
+	Err ->
+	    Err
+    end.
 
 test_stream_once(Url, Method, Options) ->
     test_stream_once(Url, Method, Options, 5000).
@@ -211,56 +298,6 @@ dump_errors(Key, Iod) ->
     [{_, Term}] = ets:lookup(ibrowse_errors, Key),
     file:write(Iod, io_lib:format("~p~n", [Term])),
     dump_errors(ets:next(ibrowse_errors, Key), Iod).
-
-%%------------------------------------------------------------------------------
-%% Unit Tests
-%%------------------------------------------------------------------------------
--define(LOCAL_TESTS, [
-                      {local_test_fun, test_20122010, []},
-                      {local_test_fun, test_pipeline_head_timeout, []},
-                      {local_test_fun, test_head_transfer_encoding, []},
-                      {local_test_fun, test_head_response_with_body, []},
-                      {local_test_fun, test_303_response_with_a_body, []},
-		      {local_test_fun, test_303_response_with_no_body, []},
-                      {local_test_fun, test_binary_headers, []},
-                      {local_test_fun, test_retry_of_requests, []},
-		      {local_test_fun, test_save_to_file_no_content_length, []},
-		      {local_test_fun, verify_chunked_streaming, []},
-		      {local_test_fun, test_chunked_streaming_once, []},
-		      {local_test_fun, test_generate_body_0, []}
-                     ]).
-
--define(TEST_LIST, [{"http://intranet/messenger", get},
-		    {"http://www.google.co.uk", get},
-		    {"http://www.google.com", get},
-		    {"http://www.google.com", options},
-                    {"https://mail.google.com", get},
-		    {"http://www.sun.com", get},
-		    {"http://www.oracle.com", get},
-		    {"http://www.bbc.co.uk", get},
-		    {"http://www.bbc.co.uk", trace},
-		    {"http://www.bbc.co.uk", options},
-		    {"http://yaws.hyber.org", get},
-		    {"http://jigsaw.w3.org/HTTP/ChunkedScript", get},
-		    {"http://jigsaw.w3.org/HTTP/TE/foo.txt", get},
-		    {"http://jigsaw.w3.org/HTTP/TE/bar.txt", get},
-		    {"http://jigsaw.w3.org/HTTP/connection.html", get},
-		    {"http://jigsaw.w3.org/HTTP/cc.html", get},
-		    {"http://jigsaw.w3.org/HTTP/cc-private.html", get},
-		    {"http://jigsaw.w3.org/HTTP/cc-proxy-revalidate.html", get},
-		    {"http://jigsaw.w3.org/HTTP/cc-nocache.html", get},
-		    {"http://jigsaw.w3.org/HTTP/h-content-md5.html", get},
-		    {"http://jigsaw.w3.org/HTTP/h-retry-after.html", get},
-		    {"http://jigsaw.w3.org/HTTP/h-retry-after-date.html", get},
-		    {"http://jigsaw.w3.org/HTTP/neg", get},
-		    {"http://jigsaw.w3.org/HTTP/negbad", get},
-		    {"http://jigsaw.w3.org/HTTP/400/toolong/", get},
-		    {"http://jigsaw.w3.org/HTTP/300/", get},
-		    {"http://jigsaw.w3.org/HTTP/Basic/", get, [{basic_auth, {"guest", "guest"}}]},
-		    {"http://jigsaw.w3.org/HTTP/CL/", get},
-		    {"http://www.httpwatch.com/httpgallery/chunked/", get},
-                    {"https://github.com", get, [{ssl_options, [{depth, 2}]}]}
-		   ]).
 
 local_unit_tests() ->
     unit_tests([], ?LOCAL_TESTS).
@@ -565,6 +602,16 @@ test_303_response_with_a_body(Url) ->
             {test_failed, Res}
     end.
 
+%% Test that the 'preserve_status_line' option works as expected
+test_preserve_status_line() ->
+    case ibrowse:send_req("http://localhost:8181/ibrowse_preserve_status_line", [], get, [],
+                          [{preserve_status_line, true}]) of
+        {ok, "200", [{ibrowse_status_line,<<"HTTP/1.1 200 OKBlah">>} | _], _} ->
+            success;
+        Res ->
+            {test_failed, Res}
+    end.
+
 %%------------------------------------------------------------------------------
 %% Test that when the save_response_to_file option is used with a server which
 %% does not send the Content-Length header, the response is saved correctly to
@@ -578,7 +625,8 @@ test_save_to_file_no_content_length() ->
 		    lists:flatten(
 		      io_lib:format("test_save_to_file_no_content_length_~p~p~p_~p~p~p.txt", [Y, M, D, H, Mi, S]))]),
     try
-	case ibrowse:send_req("http://localhost:8181/ibrowse_send_file_conn_close", [], get, [], [{save_response_to_file, Test_file}]) of
+	case ibrowse:send_req("http://localhost:8181/ibrowse_send_file_conn_close", [], get, [],
+                              [{save_response_to_file, Test_file}]) of
 	    {ok, "200", _, {file, Test_file}} ->
 		success;
 	    Res ->
