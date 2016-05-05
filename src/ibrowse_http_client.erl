@@ -565,7 +565,21 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
                                        use_proxy   = false,
                                        ssl_options = SSLOptions},
            Timeout) ->
-    ssl:connect(Host, Port, get_sock_options(Host, Options, SSLOptions), Timeout);
+    Socks5Host = get_value(socks5_host, Options, undefined),
+    Sock_options = get_sock_options(Host, Options, []),
+    Conn = case Socks5Host of
+      undefined ->
+        gen_tcp:connect(Host, Port, Sock_options, Timeout);
+      _ ->
+        catch ibrowse_socks5:connect(Host, Port, Options, Sock_options, Timeout)
+    end,
+    case Conn of
+      {ok, Sock} ->
+        ssl:connect(Sock, SSLOptions);
+      _ ->
+        error
+    end;
+    
 do_connect(Host, Port, Options, _State, Timeout) ->
     Socks5Host = get_value(socks5_host, Options, undefined),
     Sock_options = get_sock_options(Host, Options, []),
