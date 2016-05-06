@@ -575,7 +575,7 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
     end,
     case Conn of
       {ok, Sock} ->
-        ssl:connect(Sock, SSLOptions);
+        ssl:connect(Sock, SSLOptions, Timeout);
       _ ->
         error
     end;
