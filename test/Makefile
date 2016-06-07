@@ -1,5 +1,4 @@
-REBAR ?= $(shell which rebar3)
-IBROWSE_EBIN_PATH=../_build/default/lib/ibrowse/ebin
+IBROWSE_EBIN_PATH=../../ibrowse/ebin
 
 compile:
 	@erl -pa $(IBROWSE_EBIN_PATH) -make

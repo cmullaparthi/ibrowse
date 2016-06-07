@@ -111,7 +111,8 @@
 -import(ibrowse_lib, [
                       parse_url/1,
                       get_value/3,
-                      do_trace/2
+                      do_trace/2,
+                      log_msg/2
                      ]).
                       
 -record(state, {trace = false}).
@@ -496,12 +497,12 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
                             _ ->
                                 process_info_not_available
                         end,
-            (catch lager:error("{ibrowse_http_client, send_req, ~1000.p} gen_server call timeout.~nProcess info: ~p~n",
-                               [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], P_info])),
+            log_msg("{ibrowse_http_client, send_req, ~1000.p} gen_server call timeout.~nProcess info: ~p~n",
+                    [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], P_info]),
             {error, req_timedout};
         {'EXIT', {normal, _}} = Ex_rsn ->
-            (catch lager:error("{ibrowse_http_client, send_req, ~1000.p} gen_server call got ~1000.p~n",
-                              [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], Ex_rsn])),
+            log_msg("{ibrowse_http_client, send_req, ~1000.p} gen_server call got ~1000.p~n",
+                    [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], Ex_rsn]),
             {error, req_timedout};
         {error, X} when X == connection_closed;
                         X == {send_failed, {error, enotconn}};

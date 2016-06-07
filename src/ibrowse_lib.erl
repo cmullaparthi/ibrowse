@@ -20,6 +20,7 @@
          get_trace_status/2,
          do_trace/2,
          do_trace/3,
+         log_msg/2,
          url_encode/1,
          decode_rfc822_date/1,
          status_code/1,
@@ -398,12 +399,30 @@ do_trace(_, Fmt, Args) ->
                get(ibrowse_trace_token) | Args]).
 -else.
 do_trace(true, Fmt, Args) ->
-    io:format("~s -- (~s) - "++Fmt,
-              [printable_date(), 
-               get(ibrowse_trace_token) | Args]);
+    Fmt_1  = "~s -- (~s) - "++Fmt,
+    Args_1 = [printable_date(), 
+              get(ibrowse_trace_token) | Args],
+    case application:get_env(ibrowse, logger_mf) of
+        {ok, {M, F}} ->
+            log_msg(M, F, Fmt_1, Args_1);
+        _ ->
+            log_msg(io, format, Fmt_1, Args_1)
+    end;
 do_trace(_, _, _) ->
     ok.
 -endif.
+
+log_msg(Fmt, Args) ->
+    case application:get_env(ibrowse, logger_mf) of
+        {ok, {M, F}} ->
+            log_msg(M, F, Fmt, Args),
+            ok;
+        _ ->
+            ok
+    end.
+
+log_msg(M, F, Fmt, Args) ->
+    catch apply(M, F, [Fmt, Args]).
 
 -ifdef(EUNIT).
 

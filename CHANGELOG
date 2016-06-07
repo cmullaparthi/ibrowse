@@ -1,6 +1,14 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
 
+07-06-2016 - v4.3
+             * Adopted erlang.mk for compiling. I find it easier to understand
+               how 'make' behaves compared to rebar. This repo can still be built
+               using rebar for those who prefer it
+             * Removed references to lager. Introduced configurable logging function
+             * Fixed an issue where the calling process was getting an extra
+               spurious timeout message when the request was timing out
+
 19-04-2016 - v4.2.4
              * Fixed travis-ci build as it was failing in running tests. 
                No code changes to ibrowse

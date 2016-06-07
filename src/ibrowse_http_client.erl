@@ -262,17 +262,22 @@ handle_info({ssl_error, _Sock, Reason}, State) ->
     delayed_stop_timer(),
     {noreply, State_1};
 
-handle_info({req_timedout, From}, State) ->
-    case lists:keysearch(From, #request.from, queue:to_list(State#state.reqs)) of
+handle_info({req_timedout, From}, #state{reqs = Reqs} = State) ->
+    Reqs_list = queue:to_list(Reqs),
+    case lists:keysearch(From, #request.from, Reqs_list) of
         false ->
             {noreply, State};
         {value, #request{stream_to = StreamTo, req_id = ReqId}} ->
             catch StreamTo ! {ibrowse_async_response_timeout, ReqId},
             State_1 = State#state{proc_state = ?dead_proc_walking},
             shutting_down(State_1),
-            do_error_reply(State_1, req_timedout),
+            Reqs_1 = lists:filter(fun(#request{from = X_from}) ->
+                                          X_from /= From
+                                  end, Reqs_list),
+            State_2 = State_1#state{reqs = queue:from_list(Reqs_1)},
+            do_error_reply(State_2, req_timedout),
             delayed_stop_timer(),
-            {noreply, State_1}
+            {noreply, State_2}
     end;
 
 handle_info(timeout, State) ->
