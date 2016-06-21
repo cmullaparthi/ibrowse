@@ -341,9 +341,10 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
         #url{host = Host,
              port = Port,
              protocol = Protocol} = Parsed_url ->
-            Lb_pid = case ets:lookup(ibrowse_lb, {Host, Port}) of
+            {Lb_host, Lb_port} = get_host_port_for_lb(Host, Port, Options),
+            Lb_pid = case ets:lookup(ibrowse_lb, {Lb_host, Lb_port}) of
                          [] ->
-                             get_lb_pid(Parsed_url);
+                             get_lb_pid({Lb_host, Lb_port});
                          [#lb_pid{pid = Lb_pid_1}] ->
                              Lb_pid_1
                      end,
@@ -420,17 +421,27 @@ merge_options(Host, Port, Options) ->
               end
       end, Options, Config_options).
 
-get_lb_pid(Url) ->
-    gen_server:call(?MODULE, {get_lb_pid, Url}).
+get_lb_pid(Key) ->
+    gen_server:call(?MODULE, {get_lb_pid, Key}).
+
+get_host_port_for_lb(Host, Port, Options) ->
+    case get_value(use_subdomain_lb_config, Options, undefined) of
+        undefined ->
+            {Host, Port};
+        {Sub_h, Sub_p} ->
+            {Sub_h, Sub_p}
+    end.
 
 get_max_sessions(Host, Port, Options) ->
+    {Lb_host, Lb_port} = get_host_port_for_lb(Host, Port, Options),
     get_value(max_sessions, Options,
-              get_config_value({max_sessions, Host, Port},
+              get_config_value({max_sessions, Lb_host, Lb_port},
                                default_max_sessions())).
 
 get_max_pipeline_size(Host, Port, Options) ->
+    {Lb_host, Lb_port} = get_host_port_for_lb(Host, Port, Options),
     get_value(max_pipeline_size, Options,
-              get_config_value({max_pipeline_size, Host, Port},
+              get_config_value({max_pipeline_size, Lb_host, Lb_port},
                                default_max_pipeline_size())).
 
 get_max_attempts(Host, Port, Options) ->
@@ -685,7 +696,7 @@ show_dest_status() ->
     Metrics = get_metrics(),
     lists:foreach(
       fun({Host, Port, {Lb_pid, _, Tid, Size, _}}) ->
-              io:format("~40.40s | ~-5.5s | ~-5.5s | ~p~n",
+              io:format("~40.40s | ~-5.5s | ~-10.10s | ~p~n",
                         [Host ++ ":" ++ integer_to_list(Port),
                          integer_to_list(Tid),
                          integer_to_list(Size), 
@@ -891,8 +902,8 @@ set_config_value(Key, Val) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %%--------------------------------------------------------------------
-handle_call({get_lb_pid, #url{host = Host, port = Port} = Url}, _From, State) ->
-    Pid = do_get_connection(Url, ets:lookup(ibrowse_lb, {Host, Port})),
+handle_call({get_lb_pid, Key}, _From, State) ->
+    Pid = do_get_connection(Key, ets:lookup(ibrowse_lb, Key)),
     {reply, Pid, State};
 
 handle_call(stop, _From, State) ->
@@ -948,12 +959,15 @@ handle_cast(_Msg, State) ->
 handle_info(all_trace_off, State) ->
     Mspec = [{{ibrowse_conf,{trace,'$1','$2'},true},[],[{{'$1','$2'}}]}],
     Trace_on_dests = ets:select(ibrowse_conf, Mspec),
-    Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _) ->
+    Fun = fun(#lb_pid{host_port = {H, P}, ets_tid = Tid}, _) ->
                   case lists:member({H, P}, Trace_on_dests) of
                       false ->
                           ok;
                       true ->
-                          catch Pid ! {trace, false}
+                          Fun2 = fun({{_, _, Pid}, _}) ->
+                                         catch Pid ! {trace, false}
+                                 end,
+                          ets:foldl(Fun2, undefined, Tid)
                   end;
              (_, Acc) ->
                   Acc
@@ -961,24 +975,25 @@ handle_info(all_trace_off, State) ->
     ets:foldl(Fun, undefined, ibrowse_lb),
     ets:select_delete(ibrowse_conf, [{{ibrowse_conf,{trace,'$1','$2'},true},[],['true']}]),
     {noreply, State};
-                                  
+
 handle_info({trace, Bool}, State) ->
     put(my_trace_flag, Bool),
     {noreply, State};
 
 handle_info({trace, Bool, Host, Port}, State) ->
-    Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _)
-             when H == Host,
-                  P == Port ->
-                  catch Pid ! {trace, Bool};
-             (_, Acc) ->
-                  Acc
-          end,
-    ets:foldl(Fun, undefined, ibrowse_lb),
+    case ets:lookup(ibrowse_lb, {Host, Port}) of
+        [#lb_pid{ets_tid = Tid}] ->
+            Fun = fun({{_, _, Pid}, _}) ->
+                          catch Pid ! {trace, Bool}
+                  end,
+            ets:foldl(Fun, undefined, Tid);
+        _ ->
+            ok
+    end,
     ets:insert(ibrowse_conf, #ibrowse_conf{key = {trace, Host, Port},
                                            value = Bool}),
     {noreply, State};
-                     
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -1001,8 +1016,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-do_get_connection(#url{host = Host, port = Port}, []) ->
-    {ok, Pid} = ibrowse_lb:start_link([Host, Port]),
+do_get_connection(Key, []) ->
+    {ok, Pid} = ibrowse_lb:start_link([Key]),
     Pid;
 do_get_connection(_Url, [#lb_pid{pid = Pid}]) ->
     Pid.
