@@ -382,11 +382,18 @@ try_routing_request(Lb_pid, Parsed_url,
         {ok, {_Pid_cur_spec_size, _, Conn_Pid}} ->
             case do_send_req(Conn_Pid, Parsed_url, Headers,
                              Method, Body, Options_1, Timeout) of
+                {error, sel_conn_closed} when Timeout == infinity ->
+                    try_routing_request(Lb_pid, Parsed_url,
+                                        Max_sessions, 
+                                        Max_pipeline_size,
+                                        {SSLOptions, IsSSL}, 
+                                        Headers, Method, Body, Options_1,
+                                        Ori_timeout, Ori_timeout, Req_start_time, Max_attempts, Try_count + 1);
                 {error, sel_conn_closed} ->
                     Time_now = os:timestamp(),
-                    Time_taken_so_far = trunc(round(timer:now_diff(Time_now, Req_start_time)/1000)),
+                    Time_taken_so_far = round(timer:now_diff(Time_now, Req_start_time)/1000),
                     Time_remaining = Ori_timeout - Time_taken_so_far,
-                    Time_remaining_percent = trunc(round((Time_remaining/Ori_timeout)*100)),
+                    Time_remaining_percent = round((Time_remaining/Ori_timeout)*100),
                     %% io:format("~p -- Time_remaining: ~p (~p%)~n", [self(), Time_remaining, Time_remaining_percent]),
                     case (Time_remaining > 0) andalso (Time_remaining_percent >= 5) of
                         true ->
