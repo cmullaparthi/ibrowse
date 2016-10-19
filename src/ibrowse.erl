@@ -272,6 +272,7 @@ send_req(Url, Headers, Method, Body) ->
 %% optionList() = [option()]
 %% option() = {max_sessions, integer()}        |
 %%          {response_format,response_format()}|
+%%          {stream_full_chunks, boolean()}    |
 %%          {stream_chunk_size, integer()}     |
 %%          {max_pipeline_size, integer()}     |
 %%          {trace, boolean()}                 | 
