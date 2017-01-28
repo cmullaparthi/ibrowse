@@ -1,6 +1,11 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
 
+28-01-2017 - v4.4
+             * Fixes to SOCKS over SSL processing
+             * Added stream_full_chunks option
+             * Merged pull requests 145, 151
+
 07-06-2016 - v4.3
              * Adopted erlang.mk for compiling. I find it easier to understand
                how 'make' behaves compared to rebar. This repo can still be built

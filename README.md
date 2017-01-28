@@ -7,7 +7,7 @@ ibrowse is a HTTP client written in erlang.
 
 **Comments to:** chandrashekhar.mullaparthi@gmail.com
 
-**Current Version:** 4.3
+**Current Version:** 4.4
 
 **Latest Version:** git://github.com/cmullaparthi/ibrowse.git
 
