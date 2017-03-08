@@ -1878,7 +1878,7 @@ format_response_data(Resp_format, Body) ->
 
 %% dont message an unexisting server
 %% triggered by :stop or :tcp_closed on an unactive connection
-do_reply(State, undefined, undefined, _, _, Msg) -> 
+do_reply(State, undefined, undefined, _, _, _Msg) -> 
     dec_pipeline_counter(State);
 
 do_reply(State, From, undefined, _, Resp_format, {ok, St_code, Headers, Body}) ->
