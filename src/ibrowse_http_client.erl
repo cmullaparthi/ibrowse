@@ -753,7 +753,8 @@ check_ssl_options(Options, State) ->
         false ->
             State;
         true ->
-            State#state{is_ssl=true, ssl_options=get_value(ssl_options, Options)}
+            State#state{is_ssl=true, ssl_options=get_value(ssl_options,
+                    Options, [])}
     end.
 
 send_req_1(From,
