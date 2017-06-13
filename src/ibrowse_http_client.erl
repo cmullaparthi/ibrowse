@@ -619,7 +619,7 @@ is_ipv6_host(Host) ->
         {ok, {_, _, _, _}} ->
             false;
         _  ->
-            case inet:gethostbyname(Host) of
+            case inet:gethostbyname(Host, inet6) of
                 {ok, #hostent{h_addrtype = inet6}} ->
                     true;
                 _ ->
