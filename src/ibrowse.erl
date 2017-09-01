@@ -679,6 +679,21 @@ all_trace_off() ->
 %% @doc Shows some internal information about load balancing. Info
 %% about workers spawned using spawn_worker_process/2 or
 %% spawn_link_worker_process/2 is not included.
+-ifdef(ets_ref).
+show_dest_status() ->
+    io:format("~-40.40s | ~-5.5s | ~-10.10s | ~s~n",
+              ["Server:port", "ETS", "Num conns", "LB Pid"]),
+    io:format("~80.80.=s~n", [""]),
+    Metrics = get_metrics(),
+    lists:foreach(
+      fun({Host, Port, {Lb_pid, _, Tid, Size, _}}) ->
+              io:format("~40.40s | ~-5.5s | ~-5.5s | ~p~n",
+                        [Host ++ ":" ++ integer_to_list(Port),
+                         ref_to_list(Tid),
+                         integer_to_list(Size), 
+                         Lb_pid])
+      end, Metrics).
+-else.
 show_dest_status() ->
     io:format("~-40.40s | ~-5.5s | ~-10.10s | ~s~n",
               ["Server:port", "ETS", "Num conns", "LB Pid"]),
@@ -692,6 +707,7 @@ show_dest_status() ->
                          integer_to_list(Size), 
                          Lb_pid])
       end, Metrics).
+-endif.
 
 show_dest_status(Url) ->                                          
     #url{host = Host, port = Port} = ibrowse_lib:parse_url(Url),

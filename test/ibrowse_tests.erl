@@ -17,7 +17,7 @@
 -define(LONG_TIMEOUT_MS, 30000).
 -define(PAUSE_FOR_CONNECTIONS_MS, 2000).
 
--compile(export_all).
+%%-compile(export_all).
 
 setup() ->
     application:start(crypto),
