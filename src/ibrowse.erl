@@ -91,6 +91,7 @@
          set_max_sessions/3,
          set_max_pipeline_size/3,
          set_max_attempts/3,
+         set_download_dir/1,
          set_dest/3,
          trace_on/0,
          trace_off/0,
@@ -486,6 +487,11 @@ set_max_pipeline_size(Host, Port, Max) when is_integer(Max), Max > 0 ->
 %% @spec set_max_attempts(Host::string(), Port::integer(), Max::integer()) -> ok
 set_max_attempts(Host, Port, Max) when is_integer(Max), Max > 0 ->
     gen_server:call(?MODULE, {set_config_value, {max_attempts, Host, Port}, Max}).
+
+%% @doc set the download directory where the files are stored
+%% @spec set_download_dir(Dir::string()) -> ok
+set_download_dir(Dir) -> 
+    gen_server:call(?MODULE, {set_config_value, download_dir, Dir}).
 
 do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
     case catch ibrowse_http_client:send_req(Conn_Pid, Parsed_url,
