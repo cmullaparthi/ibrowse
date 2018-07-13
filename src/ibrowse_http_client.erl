@@ -174,7 +174,7 @@ handle_call({send_req, _}, _From, #state{is_closing = true} = State) ->
     {reply, {error, connection_closing}, State};
 
 handle_call({send_req, _}, _From, #state{proc_state = ?dead_proc_walking} = State) ->
-    shutting_down(State),    
+    shutting_down(State),
     {reply, {error, connection_closing}, State};
 
 handle_call({send_req, {Url, Headers, Method, Body, Options, Timeout}},
@@ -571,21 +571,28 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
                                        use_proxy   = false,
                                        ssl_options = SSLOptions},
            Timeout) ->
-    Socks5Host = get_value(socks5_host, Options, undefined),
-    Sock_options = get_sock_options(Host, Options, []),
-    Conn = case Socks5Host of
-      undefined ->
-        gen_tcp:connect(Host, Port, Sock_options, Timeout);
-      _ ->
-        catch ibrowse_socks5:connect(Host, Port, Options, Sock_options, Timeout)
-    end,
-    case Conn of
-      {ok, Sock} ->
-        ssl:connect(Sock, SSLOptions, Timeout);
-      _ ->
-        error
+    %% if a socks5 proxy is configured, open the socket separately
+    %% before upgrading the socket to a TLS connection.
+    case get_value(socks5_host, Options, undefined) of
+        %% no socks5 proxy is configured, connect directly with TLS:
+        undefined ->
+            Sock_options = get_sock_options(Host, Options, SSLOptions),
+            ssl:connect(Host, Port, Sock_options, Timeout);
+
+        %% proxy configuration is present: first establish a socket
+        %% and then upgrade:
+        _ ->
+            Sock_options = get_sock_options(Host, Options, []),
+            Conn = ibrowse_socks5:connect(Host, Port, Options,
+                                          Sock_options, Timeout),
+            case Conn of
+                {ok, Sock} ->
+                    ssl:connect(Sock, SSLOptions, Timeout);
+                _ ->
+                    error
+            end
     end;
-    
+
 do_connect(Host, Port, Options, _State, Timeout) ->
     Socks5Host = get_value(socks5_host, Options, undefined),
     Sock_options = get_sock_options(Host, Options, []),
@@ -1918,7 +1925,7 @@ format_response_data(Resp_format, Body) ->
 
 %% dont message an unexisting server
 %% triggered by :stop or :tcp_closed on an unactive connection
-do_reply(State, undefined, undefined, _, _, _Msg) -> 
+do_reply(State, undefined, undefined, _, _, _Msg) ->
     dec_pipeline_counter(State);
 
 do_reply(State, From, undefined, _, Resp_format, {ok, St_code, Headers, Body}) ->
