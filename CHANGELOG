@@ -1,6 +1,11 @@
 CONTRIBUTIONS & CHANGE HISTORY
 ==============================
 
+23-08-2018  - v4.4.1
+             * Fixes to TLS socket handling (PR#163)
+             * Fix ipv6 address family handling (PR#155)
+             * Don't send messages to closed/inactive connections (PR#152)
+
 28-01-2017 - v4.4
              * Fixes to SOCKS over SSL processing
              * Added stream_full_chunks option
