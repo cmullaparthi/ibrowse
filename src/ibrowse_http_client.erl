@@ -619,18 +619,25 @@ get_sock_options(Host, Options, SSLOptions) ->
             [binary, {active, false} | Other_sock_options]
     end.
 
+%% copy from lhttpc_client.erl
 is_ipv6_host(Host) ->
     case inet_parse:address(Host) of
         {ok, {_, _, _, _, _, _, _, _}} ->
             true;
         {ok, {_, _, _, _}} ->
             false;
-        _  ->
-            case inet:gethostbyname(Host, inet6) of
-                {ok, #hostent{h_addrtype = inet6}} ->
-                    true;
+        _ ->
+            % Prefer IPv4 over IPv6.
+            case inet:getaddr(Host, inet) of
+                {ok, _} ->
+                    false;
                 _ ->
-                    false
+                    case inet:getaddr(Host, inet6) of
+                        {ok, _} ->
+                            true;
+                        _ ->
+                            false
+                    end
             end
     end.
 
