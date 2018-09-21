@@ -605,12 +605,18 @@ do_connect(Host, Port, Options, _State, Timeout) ->
 
 get_sock_options(Host, Options, SSLOptions) ->
     Caller_socket_options = get_value(socket_options, Options, []),
-    Ipv6Options = case is_ipv6_host(Host) of
-        true ->
-            [inet6];
-        false ->
-            []
-    end,
+    PreferIPv6 = get_value(prefer_ipv6, Options, false),
+    Ipv6Options = case PreferIPv6 of
+                      true ->
+                          case is_ipv6_host(Host) of
+                              true ->
+                                  [inet6];
+                              false ->
+                                  []
+                          end;
+                      false ->
+                          []
+                  end,
     Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options ++ Ipv6Options),
     case lists:keysearch(nodelay, 1, Other_sock_options) of
         false ->
