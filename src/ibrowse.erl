@@ -342,12 +342,7 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
         #url{host = Host,
              port = Port,
              protocol = Protocol} = Parsed_url ->
-            Lb_pid = case ets:lookup(ibrowse_lb, {Host, Port}) of
-                         [] ->
-                             get_lb_pid(Parsed_url);
-                         [#lb_pid{pid = Lb_pid_1}] ->
-                             Lb_pid_1
-                     end,
+            Lb_pid = lb_pid(Host, Port, Parsed_url),
             Max_sessions = get_max_sessions(Host, Port, Options),
             Max_pipeline_size = get_max_pipeline_size(Host, Port, Options),
             Max_attempts = get_max_attempts(Host, Port, Options),
@@ -365,6 +360,20 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
                                 Headers, Method, Body, Options_1, Timeout, Timeout, os:timestamp(), Max_attempts, 0);
         Err ->
             {error, {url_parsing_failed, Err}}
+    end.
+
+lb_pid(Host, Port, Url) ->
+    case ets:lookup(ibrowse_lb, {Host, Port}) of
+        [] ->
+            get_lb_pid(Url);
+        [#lb_pid{pid = Pid}] ->
+            case is_process_alive(Pid) of
+                true ->
+                    Pid;
+                false ->
+                    ets:delete(ibrowse_lb, {Host, Port}),
+                    get_lb_pid(Url)
+            end
     end.
 
 try_routing_request(Lb_pid, Parsed_url,
