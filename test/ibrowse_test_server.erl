@@ -79,13 +79,25 @@ do_listen(ssl, Port, Opts) ->
 do_accept(tcp, Listen_sock) ->
     gen_tcp:accept(Listen_sock, ?ACCEPT_TIMEOUT_MS);
 do_accept(ssl, Listen_sock) ->
-    ssl:ssl_accept(Listen_sock, ?ACCEPT_TIMEOUT_MS).
+    handleshake(Listen_sock, ?ACCEPT_TIMEOUT_MS).
+
+-ifdef(OTP_RELEASE).
+handleshake(Listen_sock, Timeout) ->
+    ssl:handshake(Listen_sock, Timeout).
+-else.
+handleshake(Listen_sock, Timeout) ->
+    ssl:ssl_accept(Listen_sock, Timeout).
+-endif.
 
 accept_loop(Sock, Sock_type) ->
     case do_accept(Sock_type, Sock) of
         {ok, Conn} ->
             Pid = spawn_link(fun() -> connection(Conn, Sock_type) end),
             set_controlling_process(Conn, Sock_type, Pid),
+            accept_loop(Sock, Sock_type);
+        ok ->
+            Pid = spawn_link(fun() -> connection(Sock, Sock_type) end),
+            set_controlling_process(Sock, Sock_type, Pid),
             accept_loop(Sock, Sock_type);
         {error, timeout} ->
             receive
