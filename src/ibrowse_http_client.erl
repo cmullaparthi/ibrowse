@@ -133,7 +133,7 @@ send_req(Conn_Pid, Url, Headers, Method, Body, Options, Timeout) ->
 %%          {stop, Reason}
 %%--------------------------------------------------------------------
 init({Lb_Tid, #url{host = Host, port = Port}, {SSLOptions, Is_ssl}}) ->
-    process_flag(trap_exit, true),
+    maybe_trap_exits(),
     State = #state{host = Host,
                    port = Port,
                    ssl_options = SSLOptions,
@@ -143,7 +143,7 @@ init({Lb_Tid, #url{host = Host, port = Port}, {SSLOptions, Is_ssl}}) ->
     put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
     {ok, set_inac_timer(State)};
 init(Url) when is_list(Url) ->
-    process_flag(trap_exit, true),
+    maybe_trap_exits(),
     case catch ibrowse_lib:parse_url(Url) of
         #url{protocol = Protocol} = Url_rec ->
             init({undefined, Url_rec, {[], Protocol == https}});
@@ -151,7 +151,7 @@ init(Url) when is_list(Url) ->
             {error, invalid_url}
     end;
 init({Host, Port}) ->
-    process_flag(trap_exit, true),
+    maybe_trap_exits(),
     State = #state{host = Host,
                    port = Port},
     put(ibrowse_trace_token, [Host, $:, integer_to_list(Port)]),
@@ -2187,3 +2187,9 @@ get_header_value(Name, Headers, Default_val) ->
 
 delayed_stop_timer() ->
     erlang:send_after(500, self(), delayed_stop).
+
+maybe_trap_exits() ->
+    case ibrowse:get_config_value(worker_trap_exits, true) of
+        true -> process_flag(trap_exit, true);
+        false -> ok
+    end.
