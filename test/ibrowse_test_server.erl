@@ -76,10 +76,21 @@ do_listen(ssl, Port, Opts) ->
     application:start(ssl),
     ssl:listen(Port, Opts).
 
+-ifdef(OTP_RELEASE).
+
+do_accept(tcp, Listen_sock) ->
+    gen_tcp:accept(Listen_sock, ?ACCEPT_TIMEOUT_MS);
+do_accept(ssl, Listen_sock) ->
+    ssl:handshake(Listen_sock, ?ACCEPT_TIMEOUT_MS).
+
+-else.
+
 do_accept(tcp, Listen_sock) ->
     gen_tcp:accept(Listen_sock, ?ACCEPT_TIMEOUT_MS);
 do_accept(ssl, Listen_sock) ->
     ssl:ssl_accept(Listen_sock, ?ACCEPT_TIMEOUT_MS).
+
+-endif.
 
 accept_loop(Sock, Sock_type) ->
     case do_accept(Sock_type, Sock) of
