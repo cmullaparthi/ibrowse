@@ -15,7 +15,7 @@
 -define(BASE_URL, "http://localhost:" ++ integer_to_list(?SERVER_PORT)).
 -define(SHORT_TIMEOUT_MS, 5000).
 -define(LONG_TIMEOUT_MS, 30000).
--define(PAUSE_FOR_CONNECTIONS_MS, 2000).
+-define(PAUSE_FOR_CONNECTIONS_MS, 4000).
 
 %%-compile(export_all).
 
