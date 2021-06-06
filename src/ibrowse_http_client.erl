@@ -484,6 +484,15 @@ accumulate_response(Data, #state{reply_buffer      = RepBuf,
             State#state{reply_buffer = RepBuf_1}
     end.
 
+generate_timestamp() ->
+    case catch erlang:unique_integer([positive]) of
+        {'EXIT', _} ->
+            erlang:apply(erlang, now, []);
+        Unique ->
+            {A,B,C} = os:timestamp(),
+            {A * 1000000 + B, C, Unique}
+    end.
+
 make_tmp_filename(true) ->
     DownloadDir = ibrowse:get_config_value(download_dir, filename:absname("./")),
     {A,B,C} = os:timestamp(),
@@ -2050,12 +2059,7 @@ cancel_timer(Ref, {eat_message, Msg}) ->
     end.
 
 make_req_id() ->
-    case catch erlang:unique_integer() of
-        {'EXIT', _} ->
-            erlang:apply(erlang, now, []);
-        V ->
-            V
-    end.
+    generate_timestamp().
 
 to_lower(Str) when is_binary(Str) ->
     to_lower(binary_to_list(Str));
