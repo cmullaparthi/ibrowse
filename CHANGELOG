@@ -100,7 +100,7 @@ CONTRIBUTIONS & CHANGE HISTORY
              * Fixed various issues reported
 
 13-04-2011 - v2.2.0
-             * Filipe David Manana added IPv6 support. This is a mjor new
+             * Filipe David Manana added IPv6 support. This is a major new
                feature, Thank you Filipe!
              * Joseph Wayne Norton contributed tweaks to .gitignore
 

@@ -1371,7 +1371,7 @@ upgrade_to_ssl(#state{socket = Socket,
                                   proxy_tunnel_setup = done},
             send_queued_requests(lists:reverse(Q), State_1);
         Err ->
-            do_trace("Upgrade to SSL socket failed. Reson: ~p~n", [Err]),
+            do_trace("Upgrade to SSL socket failed. Reason: ~p~n", [Err]),
             do_error_reply(State, {error, {send_failed, Err}}),
             {error, send_failed}
     end.
@@ -1961,13 +1961,13 @@ do_reply(#state{prev_req_id = Prev_req_id} = State,
             catch StreamTo ! {ibrowse_async_response, ReqId, Body_1}
     end,
     catch StreamTo ! {ibrowse_async_response_end, ReqId},
-    %% We don't want to delete the Req-id to Pid mapping straightaway
+    %% We don't want to delete the Req-id to Pid mapping straight away
     %% as the client may send a stream_next message just while we are
     %% sending back this ibrowse_async_response_end message. If we
-    %% deleted this mapping straightaway, the caller will see a
+    %% deleted this mapping straight away, the caller will see a
     %% {error, unknown_req_id} when it calls ibrowse:stream_next/1. To
     %% get around this, we store the req id, and clear it after the
-    %% next request. If there are wierd combinations of stream,
+    %% next request. If there are weird combinations of stream,
     %% stream_once and sync requests on the same connection, it will
     %% take a while for the req_id-pid mapping to get cleared, but it
     %% should do no harm.
