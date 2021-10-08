@@ -141,9 +141,13 @@ init({Lb_Tid, #url{host = Host, port = Port}, {SSLOptions, Is_ssl}}) ->
                    lb_ets_tid = Lb_Tid},
     put(ibrowse_trace_token, [Host, $:, integer_to_list(Port)]),
     put(my_trace_flag, ibrowse_lib:get_trace_status(Host, Port)),
+    TraceFlag = envy:get(ibrowse, enable_ibrowse_traces, false, boolean),
+    put(my_trace_flag, TraceFlag),
     {ok, set_inac_timer(State)};
 init(Url) when is_list(Url) ->
     process_flag(trap_exit, true),
+    TraceFlag = envy:get(ibrowse, enable_ibrowse_traces, false, boolean),
+    put(my_trace_flag, TraceFlag),
     case catch ibrowse_lib:parse_url(Url) of
         #url{protocol = Protocol} = Url_rec ->
             init({undefined, Url_rec, {[], Protocol == https}});
