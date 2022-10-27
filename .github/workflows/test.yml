@@ -1,0 +1,45 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - "main"
+  push:
+
+jobs:
+  build:
+    name: Test on OTP ${{ matrix.otp_version }} and ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+        - "25.x"
+        - "24.x"
+        - "23.x"
+        - "22.x"
+        - "21.x"
+        - "20.x"
+        os: [ubuntu-latest]
+    env:
+      OTP_VERSION: ${{ matrix.otp_version }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          rebar3-version: 3.6.1
+      - uses: actions/cache@v2
+        name: Cache
+        with:
+          path: |
+            _build
+          key: ${{ runner.os }}-build-${{ matrix.otp_version }}-${{ hashFiles(format('rebar.lock')) }}-1
+          restore-keys: |
+            ${{ runner.os }}-build-${{ matrix.otp_version }}-1-
+      - name: Compile
+        run: rebar3 compile
+      - name: Eunit tests
+        run: rebar3 eunit
+      - name: Dialyzer
+        run: rebar3 dialyzer
