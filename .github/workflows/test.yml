@@ -13,6 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         include:
           - otp_version: "25.x"
           - otp_version: "24.x"
@@ -23,7 +24,6 @@ jobs:
             rebar3-version: 3.6.1
           - otp_version: "20.x"
             rebar3-version: 3.6.1
-        os: [ubuntu-latest]
     env:
       OTP_VERSION: ${{ matrix.otp_version }}
     steps:
