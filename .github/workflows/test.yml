@@ -14,10 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
+        otp_version:
+          - "25.x"
+          - "24.x"
+          - "23.x"
+          - "22.x"
+          - "21.x"
+          - "20.x"
         include:
-          - otp_version: "25.x"
-          - otp_version: "24.x"
-          - otp_version: "23.x"
           - otp_version: "22.x"
             rebar3-version: 3.6.1
           - otp_version: "21.x"
