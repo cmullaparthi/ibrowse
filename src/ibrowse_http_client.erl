@@ -577,10 +577,13 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
            Timeout) ->
     %% if a socks5 proxy is configured, open the socket separately
     %% before upgrading the socket to a TLS connection.
+    %% Extract SSL options from request Options and merge with state SSL options
+    RequestSSLOptions = get_value(ssl_opts, Options, []),
+    MergedSSLOptions = RequestSSLOptions ++ SSLOptions,
     case get_value(socks5_host, Options, undefined) of
         %% no socks5 proxy is configured, connect directly with TLS:
         undefined ->
-            Sock_options = get_sock_options(Host, Options, SSLOptions),
+            Sock_options = get_sock_options(Host, Options, MergedSSLOptions),
             ssl:connect(Host, Port, Sock_options, Timeout);
 
         %% proxy configuration is present: first establish a socket
@@ -591,7 +594,7 @@ do_connect(Host, Port, Options, #state{is_ssl      = true,
                                           Sock_options, Timeout),
             case Conn of
                 {ok, Sock} ->
-                    ssl:connect(Sock, SSLOptions, Timeout);
+                    ssl:connect(Sock, MergedSSLOptions, Timeout);
                 _ ->
                     error
             end
