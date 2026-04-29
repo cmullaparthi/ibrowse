@@ -538,13 +538,9 @@ accumulate_response(Data, #state{reply_buffer      = RepBuf,
     end.
 
 generate_timestamp() ->
-    case catch erlang:unique_integer([positive]) of
-        {'EXIT', _} ->
-            erlang:apply(erlang, now, []);
-        Unique ->
-            {A,B,C} = os:timestamp(),
-            {A * 1000000 + B, C, Unique}
-    end.
+    {A, B, C} = os:timestamp(),
+    Unique = erlang:unique_integer([positive]),
+    {A * 1000000 + B, C, Unique}.
 
 make_tmp_filename(true) ->
     DownloadDir = ibrowse:get_config_value(download_dir, filename:absname("./")),
