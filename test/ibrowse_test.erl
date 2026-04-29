@@ -38,6 +38,7 @@
          test_connect_to_unreachable_fails/0,
          test_connect_to_preserves_host_header/0,
          test_dead_lb_pid/0,
+         test_chunk_request_body/0,
          test_generate_body_0/0,
          test_retry_of_requests/0,
          test_retry_of_requests/1,
@@ -69,6 +70,7 @@
                       {local_test_fun, test_connect_to_unreachable_fails, []},
                       {local_test_fun, test_connect_to_preserves_host_header, []},
                       {local_test_fun, test_dead_lb_pid, []},
+                      {local_test_fun, test_chunk_request_body, []},
                       {local_test_fun, test_retry_of_requests, []},
 		      {local_test_fun, verify_chunked_streaming, []},
 		      {local_test_fun, test_chunked_streaming_once, []},
@@ -950,6 +952,41 @@ test_dead_lb_pid() ->
     true = NewPid /= Pid,
     true = is_process_alive(NewPid),
     success.
+
+%%------------------------------------------------------------------------------
+%% Test chunk request body encoding. We exported the function from the module
+%% to run it through these tests
+%%------------------------------------------------------------------------------
+
+% Helper
+chunk_body(Body, N) ->
+    ibrowse_http_client:chunk_request_body(Body, N).
+
+test_chunk_request_body() ->
+    Zero = <<"0\r\n\r\n">>,
+    Cases = [
+             {<<Zero/binary>>,                                            <<>>,               1024},
+             {<<Zero/binary>>,                                            [],                 1024},
+             {<<"5\r\nhello\r\n", Zero/binary>>,                          <<"hello">>,        1024},
+             {<<"5\r\nhello\r\n", Zero/binary>>,                          "hello",            1024},
+             {<<"5\r\nhello\r\n", Zero/binary>>,                          <<"hello">>,        5},
+             {<<"5\r\nhello\r\n", Zero/binary>>,                          "hello",            5},
+             {<<"5\r\nhello\r\n5\r\n worl\r\n2\r\nd!\r\n", Zero/binary>>, <<"hello world!">>, 5},
+             {<<"5\r\nhello\r\n5\r\n worl\r\n2\r\nd!\r\n", Zero/binary>>, "hello world!",     5}
+            ],
+    Failures =
+        [{Body, N, Expect, Got}
+         || {Expect, Body, N} <- Cases,
+            Got <- [iolist_to_binary(chunk_body(Body, N))],
+            Got =/= Expect
+        ],
+    % We expect fun tuples to pass through
+    Fun = fun(_) -> eof end,
+    PassthroughOk = chunk_body(Fun, 1024) =:= Fun andalso chunk_body({Fun, foo}, 1024) =:= {Fun, foo},
+    case {Failures, PassthroughOk} of
+        {[], true} -> success;
+        {_, _}     -> {failed, Failures, {passthrough_ok, PassthroughOk}}
+    end.
 
 do_trace(Fmt, Args) ->
     do_trace(get(my_trace_flag), Fmt, Args).

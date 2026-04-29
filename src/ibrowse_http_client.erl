@@ -19,7 +19,8 @@
          start/1,
          start/2,
          stop/1,
-         send_req/7
+         send_req/7,
+         chunk_request_body/2
         ]).
 
 -ifdef(debug).
@@ -1220,32 +1221,35 @@ chunk_request_body(Body, _ChunkSize) when is_tuple(Body) orelse
 chunk_request_body(Body, ChunkSize) ->
     chunk_request_body(Body, ChunkSize, []).
 
-chunk_request_body(Body, _ChunkSize, Acc) when Body == <<>>; Body == [] ->
+chunk_request_body(Body, ChunkSize, Acc) when is_binary(Body) ->
+    chunk_binary_body(Body, ChunkSize, Acc);
+chunk_request_body([], _ChunkSize, Acc) ->
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk | Acc]);
-chunk_request_body(Body, ChunkSize, Acc) when is_binary(Body),
-                                              size(Body) >= ChunkSize ->
-    <<ChunkBody:ChunkSize/binary, Rest/binary>> = Body,
-    Chunk = [?dec2hex(ChunkSize),"\r\n",
-             ChunkBody, "\r\n"],
-    chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
-chunk_request_body(Body, _ChunkSize, Acc) when is_binary(Body) ->
-    BodySize = size(Body),
-    Chunk = [?dec2hex(BodySize),"\r\n",
-             Body, "\r\n"],
-    LastChunk = "0\r\n",
-    lists:reverse(["\r\n", LastChunk, Chunk | Acc]);
 chunk_request_body(Body, ChunkSize, Acc) when length(Body) >= ChunkSize ->
     {ChunkBody, Rest} = split_list_at(Body, ChunkSize),
-    Chunk = [?dec2hex(ChunkSize),"\r\n",
-             ChunkBody, "\r\n"],
+    Chunk = [?dec2hex(ChunkSize),"\r\n", ChunkBody, "\r\n"],
     chunk_request_body(Rest, ChunkSize, [Chunk | Acc]);
 chunk_request_body(Body, _ChunkSize, Acc) when is_list(Body) ->
     BodySize = length(Body),
-    Chunk = [?dec2hex(BodySize),"\r\n",
-             Body, "\r\n"],
+    Chunk = [?dec2hex(BodySize),"\r\n", Body, "\r\n"],
     LastChunk = "0\r\n",
     lists:reverse(["\r\n", LastChunk, Chunk | Acc]).
+
+chunk_binary_body(Body, ChunkSize, Acc) ->
+    case Body of
+        <<ChunkBody:ChunkSize/binary, Rest/binary>> ->
+            Chunk = [?dec2hex(ChunkSize),"\r\n", ChunkBody, "\r\n"],
+            chunk_binary_body(Rest, ChunkSize, [Chunk | Acc]);
+        <<>> ->
+            LastChunk = "0\r\n",
+            lists:reverse(["\r\n", LastChunk | Acc]);
+        _ ->
+            BodySize = byte_size(Body),
+            Chunk = [?dec2hex(BodySize),"\r\n", Body, "\r\n"],
+            LastChunk = "0\r\n",
+            lists:reverse(["\r\n", LastChunk, Chunk | Acc])
+    end.
 
 
 parse_response(<<>>, #state{cur_req = undefined}=State) ->
