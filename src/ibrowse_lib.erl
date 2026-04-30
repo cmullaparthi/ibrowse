@@ -174,15 +174,15 @@ decode_base64(Bin) when is_binary(Bin) ->
     base64:decode(Bin).
 
 get_value(Tag, TVL, DefVal) ->
-    case lists:keysearch(Tag, 1, TVL) of
+    case lists:keyfind(Tag, 1, TVL) of
         false ->
             DefVal;
-        {value, {_, Val}} ->
+        {_, Val} ->
             Val
     end.
 
 get_value(Tag, TVL) ->
-    {value, {_, V}} = lists:keysearch(Tag,1,TVL),
+    {_, V} = lists:keyfind(Tag, 1, TVL),
     V.
 
 parse_url(Url) ->

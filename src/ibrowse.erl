@@ -423,7 +423,7 @@ merge_options(Host, Port, Options) ->
                      get_config_value({options, global}, []),
     lists:foldl(
       fun({Key, Val}, Acc) ->
-              case lists:keysearch(Key, 1, Options) of
+              case lists:keyfind(Key, 1, Options) of
                   false ->
                       [{Key, Val} | Acc];
                   _ ->

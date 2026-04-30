@@ -266,10 +266,10 @@ handle_info({ssl_error, _Sock, Reason}, State) ->
 
 handle_info({req_timedout, From}, #state{reqs = Reqs} = State) ->
     Reqs_list = queue:to_list(Reqs),
-    case lists:keysearch(From, #request.from, Reqs_list) of
+    case lists:keyfind(From, #request.from, Reqs_list) of
         false ->
             {noreply, State};
-        {value, #request{stream_to = StreamTo, req_id = ReqId}} ->
+        #request{stream_to = StreamTo, req_id = ReqId} ->
             catch StreamTo ! {ibrowse_async_response_timeout, ReqId},
             State_1 = State#state{proc_state = ?dead_proc_walking},
             shutting_down(State_1),
@@ -689,10 +689,10 @@ get_sock_options(Host, Options, SSLOptions) ->
                           []
                   end,
     Other_sock_options = filter_sock_options(SSLOptions ++ Caller_socket_options ++ Ipv6Options),
-    case lists:keysearch(nodelay, 1, Other_sock_options) of
+    case lists:keyfind(nodelay, 1, Other_sock_options) of
         false ->
             [{nodelay, true}, binary, {active, false} | Other_sock_options];
-        {value, _} ->
+        _ ->
             [binary, {active, false} | Other_sock_options]
     end.
 
@@ -1071,14 +1071,14 @@ maybe_modify_headers(#url{host = Host, port = Port} = Url,
     case get_value(headers_as_is, Options, false) of
         false ->
             Headers_1 = add_auth_headers(Url, Options, Headers, State),
-            HostHeaderValue = case lists:keysearch(host_header, 1, Options) of
+            HostHeaderValue = case lists:keyfind(host_header, 1, Options) of
                                   false ->
                                       case Port of
                                           80 -> Host;
                                           443 -> Host;
                                           _ -> [Host, ":", integer_to_list(Port)]
                                       end;
-                                  {value, {_, Host_h_val}} ->
+                                  {_, Host_h_val} ->
                                       Host_h_val
                               end,
             [{"Host", HostHeaderValue} | Headers_1];
@@ -1126,7 +1126,7 @@ make_request(Method, Headers, AbsPath, RelPath, Body, Options,
            end,
     Headers_0 = [Fun1(X) || X <- Headers],
     Headers_1 =
-        case lists:keysearch("content-length", 1, Headers_0) of
+        case lists:keyfind("content-length", 1, Headers_0) of
             false when (Body =:= [] orelse Body =:= <<>>) andalso
                        (Method =:= post orelse Method =:= put) ->
                 [{"content-length", "Content-Length", "0"} | Headers_0];
@@ -2184,8 +2184,8 @@ get_stream_chunk_size(Options) ->
         true ->
             infinity;
         _ ->
-            case lists:keysearch(stream_chunk_size, 1, Options) of
-                {value, {_, V}} when V > 0 ->
+            case lists:keyfind(stream_chunk_size, 1, Options) of
+                {_, V} when V > 0 ->
                     V;
                 _ ->
                     ?DEFAULT_STREAM_CHUNK_SIZE
@@ -2252,12 +2252,12 @@ to_binary(X) when is_list(X)          -> list_to_binary(X);
 to_binary(X) when is_binary(X)        -> X.
 
 get_header_value(Name, Headers, Default_val) ->
-    case lists:keysearch(Name, 1, Headers) of
+    case lists:keyfind(Name, 1, Headers) of
         false ->
             Default_val;
-        {value, {_, Val}} when is_binary(Val) ->
+        {_, Val} when is_binary(Val) ->
             binary_to_list(Val);
-        {value, {_, Val}} ->
+        {_, Val} ->
             Val
     end.
 
