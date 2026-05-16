@@ -62,11 +62,13 @@ d2h(N) when N<10 -> N+$0;
 d2h(N) -> N+$a-10.
 
 decode_rfc822_date(String) when is_list(String) ->
-    case catch decode_rfc822_date_1(string:tokens(String, ", \t\r\n")) of
-        {'EXIT', _} ->
-            {error, invalid_date};
-        Res ->
-            Res
+    try
+        decode_rfc822_date_1(string:tokens(String, ", \t\r\n"))
+    catch
+        throw:Term ->
+            Term;
+        _:_ ->
+            {error, invalid_date}
     end.
 
 % TODO: Have to handle the Zone
@@ -422,7 +424,7 @@ log_msg(Fmt, Args) ->
     end.
 
 log_msg(M, F, Fmt, Args) ->
-    catch apply(M, F, [Fmt, Args]).
+    ?TRY_CATCH(M, F, [Fmt, Args]).
 
 -ifdef(EUNIT).
 

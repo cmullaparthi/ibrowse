@@ -11,6 +11,8 @@
          get_conn_pipeline_depth/0
         ]).
 
+-include_lib("ibrowse/include/ibrowse.hrl").
+
 -record(request, {method, uri, version, headers = [], body = [], state}).
 
 -define(dec2hex(X), erlang:integer_to_list(X, 16)).
@@ -51,7 +53,7 @@ start_server(Port, Sock_type) ->
     ibrowse_socks_server:start(8383, 2). %% Username/Password auth
 
 stop_server(Port) ->
-    catch server_proc_name(Port) ! stop,
+    ?TRY_CATCH(fun erlang:send/2, [server_proc_name(Port), stop]),
     ibrowse_socks_server:stop(8282),
     ibrowse_socks_server:stop(8383),
     timer:sleep(2000),  % wait for server to receive msg and unregister
@@ -104,12 +106,12 @@ accept_loop(Sock, Sock_type) ->
     end.
 
 connection(Conn, Sock_type) ->
-    catch ets:insert(?CONN_PIPELINE_DEPTH, {self(), 0}),
+    ?TRY_CATCH(fun ets:insert/2, [?CONN_PIPELINE_DEPTH, {self(), 0}]),
     try
 	inet:setopts(Conn, [{packet, http}, {active, true}]),
         server_loop(Conn, Sock_type, #request{})
     after
-        catch ets:delete(?CONN_PIPELINE_DEPTH, self())
+        ?TRY_CATCH(fun ets:delete/2, [?CONN_PIPELINE_DEPTH, self()])
     end.
 
 set_controlling_process(Sock, tcp, Pid) ->
@@ -125,7 +127,7 @@ setopts(Sock, ssl, Opts) ->
 server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
     receive
         {http, Sock, {http_request, HttpMethod, HttpUri, HttpVersion}} ->
-            catch ets:update_counter(?CONN_PIPELINE_DEPTH, self(), 1),
+            ?TRY_CATCH(fun ets:update_counter/3, [?CONN_PIPELINE_DEPTH, self(), 1]),
             server_loop(Sock, Sock_type, Req#request{method = HttpMethod,
                                                      uri = HttpUri,
                                                      version = HttpVersion});
@@ -140,7 +142,7 @@ server_loop(Sock, Sock_type, #request{headers = Headers} = Req) ->
 		collect_body ->
 		    server_loop(Sock, Sock_type, Req#request{state = collect_body});
                 _ ->
-                    catch ets:update_counter(?CONN_PIPELINE_DEPTH, self(), -1)
+                    ?TRY_CATCH(fun ets:update_counter/3, [?CONN_PIPELINE_DEPTH, self(), -1])
             end,
             server_loop(Sock, Sock_type, #request{});
         {http, Sock, {http_error, Packet}} when Req#request.state == collect_body ->

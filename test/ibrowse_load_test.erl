@@ -32,10 +32,14 @@ start_1(Num_workers, Num_requests, Max_sess) ->
     application:start(ibrowse),
     application:set_env(ibrowse, inactivity_timeout, 5000),
     Ulimit = os:cmd("ulimit -n"),
-    case catch list_to_integer(string:strip(Ulimit, right, $\n)) of
+    try list_to_integer(string:strip(Ulimit, right, $\n)) of
         X when is_integer(X), X > 3000 ->
             ok;
         X ->
+            io:format("Load test not starting. {insufficient_value_for_ulimit, ~p}~n", [X]),
+            exit({insufficient_value_for_ulimit, X})
+    catch
+        _:X ->
             io:format("Load test not starting. {insufficient_value_for_ulimit, ~p}~n", [X]),
             exit({insufficient_value_for_ulimit, X})
     end,
@@ -108,11 +112,11 @@ spawn_workers(0, _Num_requests, _Parent, Acc) ->
     lists:reverse(Acc);
 spawn_workers(Num_workers, Num_requests, Parent, Acc) ->
     Pid_ref = spawn_monitor(fun() ->
-                                    case catch worker_loop(Parent, Num_requests) of
-                                        {'EXIT', Rsn} ->
-                                            io:format("Worker crashed with reason: ~p~n", [Rsn]);
-                                        _ ->
-                                            ok
+                                    try worker_loop(Parent, Num_requests) of
+                                        _ -> ok
+                                    catch
+                                        throw:_ -> ok;
+                                        _:Rsn -> io:format("Worker crashed with reason: ~p~n", [Rsn])
                                     end
                             end),
     spawn_workers(Num_workers - 1, Num_requests, Parent, [Pid_ref | Acc]).
@@ -184,10 +188,12 @@ worker_loop(Parent, N) ->
     worker_loop(Parent, N - 1).
 
 update_unknown_counter(Counter, Inc_val) ->
-    case catch ets:update_counter(?ibrowse_load_test_counters, Counter, Inc_val) of
-        {'EXIT', _} ->
+    try ets:update_counter(?ibrowse_load_test_counters, Counter, Inc_val) of
+        _ -> ok
+    catch
+        throw:_ ->
+            ok;
+        _:_ ->
             ets:insert_new(?ibrowse_load_test_counters, {Counter, 0}),
-            update_unknown_counter(Counter, Inc_val);
-        _ ->
-            ok
+            update_unknown_counter(Counter, Inc_val)
     end.
