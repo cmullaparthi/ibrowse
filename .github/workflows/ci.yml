@@ -15,6 +15,7 @@ jobs:
         os:
           - ubuntu-latest
         otp:
+          - "29"
           - "28"
           - "27"
           - "26"
@@ -23,4 +24,3 @@ jobs:
       - uses: actions/checkout@v5
       - run: make
       - run: make unit_tests
- 
