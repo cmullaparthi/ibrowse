@@ -102,7 +102,11 @@
          show_dest_status/1,
          show_dest_status/2,
          get_metrics/0,
-         get_metrics/2
+         get_metrics/2,
+         import_config/0,
+         import_config/1,
+         apply_config/1,
+         insert_config/1
         ]).
 
 -ifdef(debug).
@@ -143,11 +147,11 @@ start() ->
 
 %% @doc Stop the ibrowse process. Useful when testing using the shell.
 stop() ->
-    case catch gen_server:call(ibrowse, stop) of
-        {'EXIT',{noproc,_}} ->
-            ok;
-        Res ->
-            Res
+    try
+        gen_server:call(ibrowse, stop)
+    catch
+        exit:{noproc, _} -> ok;
+        exit:Reason -> {'EXIT', Reason}
     end.
 
 %% @doc This is the basic function to send a HTTP request.
@@ -339,7 +343,7 @@ send_req(Url, Headers, Method, Body, Options) ->
 %% @spec send_req(Url, Headers::headerList(), Method::method(), Body::body(), Options::optionList(), Timeout) -> response()
 %% Timeout = integer() | infinity
 send_req(Url, Headers, Method, Body, Options, Timeout) ->
-    case catch parse_url(Url) of
+    try parse_url(Url) of
         #url{host = Host,
              port = Port,
              protocol = Protocol} = Parsed_url ->
@@ -355,12 +359,15 @@ send_req(Url, Headers, Method, Body, Options, Timeout) ->
                     true -> {get_value(ssl_options, Options_1, []), true}
                 end,
             try_routing_request(Lb_pid, Parsed_url,
-                                Max_sessions, 
+                                Max_sessions,
                                 Max_pipeline_size,
-                                {SSLOptions, IsSSL}, 
+                                {SSLOptions, IsSSL},
                                 Headers, Method, Body, Options_1, Timeout, Timeout, os:timestamp(), Max_attempts, 0);
         Err ->
             {error, {url_parsing_failed, Err}}
+    catch
+        _:Reason ->
+            {error, {url_parsing_failed, Reason}}
     end.
 
 lb_pid(Host, Port, Url) ->
@@ -503,36 +510,22 @@ set_download_dir(Dir) ->
     gen_server:call(?MODULE, {set_config_value, download_dir, Dir}).
 
 do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
-    case catch ibrowse_http_client:send_req(Conn_Pid, Parsed_url,
-                                            Headers, Method, ensure_bin(Body),
-                                            Options, Timeout) of
-        {'EXIT', {timeout, _}} ->
-            P_info = case catch erlang:process_info(Conn_Pid, [messages, message_queue_len, backtrace]) of
-                            [_|_] = Conn_Pid_info_list ->
-                                Conn_Pid_info_list;
-                            _ ->
-                                process_info_not_available
-                        end,
-            log_msg("{ibrowse_http_client, send_req, ~1000.p} gen_server call timeout.~nProcess info: ~p~n",
-                    [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], P_info]),
-            {error, req_timedout};
-        {'EXIT', {normal, _}} = Ex_rsn ->
-            log_msg("{ibrowse_http_client, send_req, ~1000.p} gen_server call got ~1000.p~n",
-                    [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], Ex_rsn]),
-            {error, req_timedout};
-        {error, X} when X == connection_closed;
-                        X == {send_failed, {error, enotconn}};
-                        X == {send_failed,{error,einval}};
-                        X == {send_failed,{error,closed}};
-                        X == connection_closing;
-                        ((X == connection_closed_no_retry) andalso ((Method == get) orelse (Method == head))) ->
+    try ibrowse_http_client:send_req(Conn_Pid, Parsed_url,
+                                     Headers, Method, ensure_bin(Body),
+                                     Options, Timeout) of
+        {error, X} when
+            X == connection_closed;
+            X == {send_failed, {error, enotconn}};
+            X == {send_failed, {error, einval}};
+            X == {send_failed, {error, closed}};
+            X == connection_closing;
+            ((X == connection_closed_no_retry) andalso ((Method == get) orelse (Method == head)))
+            ->
             {error, sel_conn_closed};
         {error, connection_closed_no_retry} ->
             {error, connection_closed};
         {error, {'EXIT', {noproc, _}}} ->
             {error, sel_conn_closed};
-        {'EXIT', Reason} ->
-            {error, {'EXIT', Reason}};
         {ok, St_code, Headers, Body} = Ret when is_binary(Body) ->
             case get_value(response_format, Options, list) of
                 list ->
@@ -549,6 +542,35 @@ do_send_req(Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout) ->
             end;
         Ret ->
             Ret
+    catch
+        throw:Term ->
+            Term;
+        exit:{timeout, _} ->
+            P_info =
+                try erlang:process_info(Conn_Pid, [messages, message_queue_len, backtrace]) of
+                    [_ | _] = Conn_Pid_info_list ->
+                        Conn_Pid_info_list;
+                    _ ->
+                        process_info_not_available
+                catch
+                    _:_ ->
+                        process_info_not_available
+                end,
+            log_msg(
+                "{ibrowse_http_client, send_req, ~1000.p} gen_server call timeout.~nProcess info: ~p~n",
+                [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], P_info]
+            ),
+            {error, req_timedout};
+        exit:{normal, _} = Ex_rsn ->
+            log_msg(
+                "{ibrowse_http_client, send_req, ~1000.p} gen_server call got ~1000.p~n",
+                [[Conn_Pid, Parsed_url, Headers, Method, Body, Options, Timeout], Ex_rsn]
+            ),
+            {error, req_timedout};
+        exit:Reason ->
+            {error, {'EXIT', Reason}};
+        error:Reason:Stacktrace ->
+            {error, {'EXIT', {Reason, Stacktrace}}}
     end.
 
 ensure_bin(L) when is_list(L)                     -> list_to_binary(L);
@@ -620,7 +642,7 @@ send_req_direct(Conn_pid, Url, Headers, Method, Body, Options) ->
 %% @doc Same as send_req/6 except that the first argument is the PID
 %% returned by spawn_worker_process/2 or spawn_link_worker_process/2
 send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
-    case catch parse_url(Url) of
+    try parse_url(Url) of
         #url{host = Host,
              port = Port} = Parsed_url ->
             Options_1 = merge_options(Host, Port, Options),
@@ -632,18 +654,21 @@ send_req_direct(Conn_pid, Url, Headers, Method, Body, Options, Timeout) ->
             end;
         Err ->
             {error, {url_parsing_failed, Err}}
+    catch
+        _:Reason ->
+            {error, {url_parsing_failed, Reason}}
     end.
 
 %% @doc Tell ibrowse to stream the next chunk of data to the
 %% caller. Should be used in conjunction with the
 %% <code>stream_to</code> option
 %% @spec stream_next(Req_id :: req_id()) -> ok | {error, unknown_req_id}
-stream_next(Req_id) ->    
+stream_next(Req_id) ->
     case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
-            catch Pid ! {stream_next, Req_id},
+            ?TRY_CATCH(fun erlang:send/2, [Pid, {stream_next, Req_id}]),
             ok
     end.
 
@@ -653,12 +678,12 @@ stream_next(Req_id) ->
 %% the connection which is serving this Req_id will be aborted, and an
 %% error returned.
 %% @spec stream_close(Req_id :: req_id()) -> ok | {error, unknown_req_id}
-stream_close(Req_id) ->    
+stream_close(Req_id) ->
     case ets:lookup(ibrowse_stream, {req_id_pid, Req_id}) of
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
-            catch Pid ! {stream_close, Req_id},
+            ?TRY_CATCH(fun erlang:send/2, [Pid, {stream_close, Req_id}]),
             ok
     end.
 
@@ -757,12 +782,15 @@ get_metrics(Host, Port) ->
         [] ->
             no_active_processes;
         [#lb_pid{pid = Lb_pid, ets_tid = Tid}] ->
-            MsgQueueSize = case (catch process_info(Lb_pid, message_queue_len)) of
-			       {message_queue_len, Msg_q_len} ->
-				   Msg_q_len;
-			       _ ->
-				   -1
-			   end,
+            MsgQueueSize =
+                try process_info(Lb_pid, message_queue_len) of
+                    {message_queue_len, Msg_q_len} ->
+                        Msg_q_len;
+                    _ ->
+                        -1
+                catch
+                    _:_ -> -1
+                end,
             case Tid of
                 undefined ->
                     {Lb_pid, MsgQueueSize, undefined, 0, {{0, 0}, {0, 0}}};
@@ -924,19 +952,19 @@ handle_call({set_config_value, Key, Val}, _From, State) ->
     {reply, ok, State};
 
 handle_call(rescan_config, _From, State) ->
-    Ret = (catch import_config()),
+    Ret = ?TRY_CATCH(fun ?MODULE:import_config/0, []),
     {reply, Ret, State};
 
 handle_call({rescan_config, File}, _From, State) ->
-    Ret = (catch import_config(File)),
+    Ret = ?TRY_CATCH(fun ?MODULE:import_config/1, [File]),
     {reply, Ret, State};
 
 handle_call({rescan_config_terms, Terms}, _From, State) ->
-    Ret = (catch apply_config(Terms)),
+    Ret = ?TRY_CATCH(fun ?MODULE:apply_config/1, [Terms]),
     {reply, Ret, State};
 
 handle_call({add_config_terms, Terms}, _From, State) ->
-    Ret = (catch insert_config(Terms)),
+    Ret = ?TRY_CATCH(fun ?MODULE:insert_config/1, [Terms]),
     {reply, Ret, State};
 
 handle_call(Request, _From, State) ->
@@ -969,11 +997,11 @@ handle_info(all_trace_off, State) ->
                       false ->
                           ok;
                       true ->
-                          catch Pid ! {trace, false}
+                          ?TRY_CATCH(fun erlang:send/2, [Pid, {trace, false}])
                   end;
              (_, Acc) ->
                   Acc
-          end,
+           end,
     ets:foldl(Fun, undefined, ibrowse_lb),
     ets:select_delete(ibrowse_conf, [{{ibrowse_conf,{trace,'$1','$2'},true},[],['true']}]),
     {noreply, State};
@@ -986,7 +1014,7 @@ handle_info({trace, Bool, Host, Port}, State) ->
     Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _)
              when H == Host,
                   P == Port ->
-                  catch Pid ! {trace, Bool};
+                  ?TRY_CATCH(fun erlang:send/2, [Pid, {trace, Bool}]);
              (_, Acc) ->
                   Acc
           end,
