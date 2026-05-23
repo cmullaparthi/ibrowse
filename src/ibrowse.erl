@@ -643,7 +643,7 @@ stream_next(Req_id) ->
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
-            catch Pid ! {stream_next, Req_id},
+            Pid ! {stream_next, Req_id},
             ok
     end.
 
@@ -658,7 +658,7 @@ stream_close(Req_id) ->
         [] ->
             {error, unknown_req_id};
         [{_, Pid}] ->
-            catch Pid ! {stream_close, Req_id},
+            Pid ! {stream_close, Req_id},
             ok
     end.
 
@@ -969,7 +969,7 @@ handle_info(all_trace_off, State) ->
                       false ->
                           ok;
                       true ->
-                          catch Pid ! {trace, false}
+                          Pid ! {trace, false}
                   end;
              (_, Acc) ->
                   Acc
@@ -986,7 +986,7 @@ handle_info({trace, Bool, Host, Port}, State) ->
     Fun = fun(#lb_pid{host_port = {H, P}, pid = Pid}, _)
              when H == Host,
                   P == Port ->
-                  catch Pid ! {trace, Bool};
+                  Pid ! {trace, Bool};
              (_, Acc) ->
                   Acc
           end,
