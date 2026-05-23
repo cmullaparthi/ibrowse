@@ -271,7 +271,7 @@ handle_info({req_timedout, From}, #state{reqs = Reqs} = State) ->
         false ->
             {noreply, State};
         #request{stream_to = StreamTo, req_id = ReqId} ->
-            StreamTo ! {ibrowse_async_response_timeout, ReqId},
+            catch StreamTo ! {ibrowse_async_response_timeout, ReqId},
             State_1 = State#state{proc_state = ?dead_proc_walking},
             shutting_down(State_1),
             Reqs_1 = lists:filter(fun(#request{from = X_from}) ->
@@ -1038,7 +1038,7 @@ send_req_1(From,
                                 false ->
                                     ok;
                                 true ->
-                                    StreamTo ! {ibrowse_async_raw_req, Raw_req}
+                                    catch StreamTo ! {ibrowse_async_raw_req, Raw_req}
                             end
                     end,
                     State_4 = set_inac_timer(State_3),
@@ -1974,9 +1974,9 @@ send_async_headers(ReqId, StreamTo, Give_raw_headers,
     {Headers_1, Raw_headers_1} = maybe_add_custom_headers(Status_line, Headers, Raw_headers, Opts),
     case Give_raw_headers of
         false ->
-            StreamTo ! {ibrowse_async_headers, ReqId, StatCode, Headers_1};
+            catch StreamTo ! {ibrowse_async_headers, ReqId, StatCode, Headers_1};
         true ->
-            StreamTo ! {ibrowse_async_headers, ReqId, Status_line, Raw_headers_1}
+            catch StreamTo ! {ibrowse_async_headers, ReqId, Status_line, Raw_headers_1}
     end.
 
 maybe_add_custom_headers(Status_line, Headers, Raw_headers, Opts) ->
@@ -2030,9 +2030,9 @@ do_reply(#state{prev_req_id = Prev_req_id} = State,
             ok;
         _ ->
             Body_1 = format_response_data(Resp_format, Body),
-            StreamTo ! {ibrowse_async_response, ReqId, Body_1}
+            catch StreamTo ! {ibrowse_async_response, ReqId, Body_1}
     end,
-    StreamTo ! {ibrowse_async_response_end, ReqId},
+    catch StreamTo ! {ibrowse_async_response_end, ReqId},
     %% We don't want to delete the Req-id to Pid mapping straight away
     %% as the client may send a stream_next message just while we are
     %% sending back this ibrowse_async_response_end message. If we
@@ -2048,14 +2048,14 @@ do_reply(#state{prev_req_id = Prev_req_id} = State,
 do_reply(State, _From, StreamTo, ReqId, Resp_format, Msg) ->
     State_1 = dec_pipeline_counter(State),
     Msg_1 = format_response_data(Resp_format, Msg),
-    StreamTo ! {ibrowse_async_response, ReqId, Msg_1},
+    catch StreamTo ! {ibrowse_async_response, ReqId, Msg_1},
     State_1.
 
 do_interim_reply(undefined, _, _ReqId, _Msg) ->
     ok;
 do_interim_reply(StreamTo, Response_format, ReqId, Msg) ->
     Msg_1 = format_response_data(Response_format, Msg),
-    StreamTo ! {ibrowse_async_response, ReqId, Msg_1}.
+    catch StreamTo ! {ibrowse_async_response, ReqId, Msg_1}.
 
 do_error_reply(#state{reqs = Reqs, tunnel_setup_queue = Tun_q} = State, Err) ->
     ReqList = queue:to_list(Reqs),

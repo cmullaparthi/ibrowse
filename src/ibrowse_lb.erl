@@ -165,7 +165,7 @@ handle_info({trace, Bool}, #state{ets_tid = undefined} = State) ->
 
 handle_info({trace, Bool}, #state{ets_tid = Tid} = State) ->
     ets:foldl(fun({{_, Pid}, _}, Acc) when is_pid(Pid) ->
-		      Pid ! {trace, Bool},
+		      catch Pid ! {trace, Bool},
 		      Acc;
 		 (_, Acc) ->
 		      Acc
