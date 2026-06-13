@@ -4,6 +4,9 @@
 %%% Created : 17 Oct 2010 by Chandrashekhar Mullaparthi <chandrashekhar.mullaparthi@t-mobile.co.uk>
 
 -module(ibrowse_test_server).
+
+-compile(nowarn_deprecated_catch).
+
 -export([
          start_server/0,
          start_server/2,

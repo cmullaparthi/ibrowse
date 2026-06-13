@@ -1,4 +1,4 @@
-IBROWSE_EBIN_PATH=../../ibrowse/ebin
+IBROWSE_EBIN_PATH=../ebin
 
 compile:
 	@erl -pa $(IBROWSE_EBIN_PATH) -make

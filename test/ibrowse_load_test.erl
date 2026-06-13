@@ -1,5 +1,8 @@
 -module(ibrowse_load_test).
 %%-compile(export_all).
+
+-compile(nowarn_deprecated_catch).
+
 -export([
          start/3,
          query_state/0,

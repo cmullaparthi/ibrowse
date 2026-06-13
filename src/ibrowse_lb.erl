@@ -8,6 +8,9 @@
 -module(ibrowse_lb).
 -author(chandru).
 -behaviour(gen_server).
+
+-compile(nowarn_deprecated_catch).
+
 %%--------------------------------------------------------------------
 %% Include files
 %%--------------------------------------------------------------------

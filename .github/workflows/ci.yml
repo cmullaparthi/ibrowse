@@ -15,12 +15,13 @@ jobs:
         os:
           - ubuntu-latest
         otp:
+          - "29"
           - "28"
           - "27"
           - "26"
           - "25"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: make
       - run: make unit_tests
  

@@ -10,6 +10,8 @@
 -compile(export_all).
 -endif.
 
+-compile(nowarn_deprecated_catch).
+
 -include("ibrowse.hrl").
 
 -ifdef(EUNIT).

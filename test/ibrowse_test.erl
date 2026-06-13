@@ -48,7 +48,9 @@
          socks5_auth_fail/0
 	]).
 
--include_lib("ibrowse/include/ibrowse.hrl").
+-include("../include/ibrowse.hrl").
+
+-compile(nowarn_deprecated_catch).
 
 %%------------------------------------------------------------------------------
 %% Unit Tests
